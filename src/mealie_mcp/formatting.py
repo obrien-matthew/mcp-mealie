@@ -168,6 +168,30 @@ def format_shopping_list(s: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def format_recipe_attach(list_id: str, recipe_id: str, response: Any) -> dict[str, Any]:
+    """Slim down the bulk add-recipe-to-list response.
+
+    Mealie returns the full updated list (every item, every household label
+    setting). For LLM consumption we only need: which list, which recipe,
+    and the items that were just added by this attach.
+    """
+    out: dict[str, Any] = {"list_id": list_id, "recipe_id": recipe_id}
+    if not isinstance(response, dict):
+        out["items_added"] = 0
+        return out
+    items = response.get("listItems") or []
+    new_items = [
+        format_shopping_item(i)
+        for i in items
+        if any(
+            r.get("recipeId") == recipe_id for r in (i.get("recipeReferences") or [])
+        )
+    ]
+    out["items_added"] = len(new_items)
+    out["items"] = new_items
+    return out
+
+
 def format_shopping_item(i: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": i.get("id"),

@@ -23,6 +23,7 @@ class TestRegisteredTools:
         "create_recipe_from_url",
         "update_recipe",
         "delete_recipe",
+        "set_recipe_rating",
         # cookbooks
         "list_cookbooks",
         "get_cookbook",
@@ -59,7 +60,6 @@ class TestRegisteredTools:
         # parser
         "parse_ingredient",
         "parse_ingredients",
-        "parse_recipe_ingredients",
         # categories
         "list_categories",
         "get_category",

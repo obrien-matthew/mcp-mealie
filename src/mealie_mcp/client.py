@@ -28,6 +28,7 @@ class MealieClient:
             timeout=30.0,
             headers={"Authorization": f"Bearer {self._token}"},
         )
+        self._self_user_id: str | None = None
 
     # ------------------------------------------------------------------
     # Internals
@@ -76,6 +77,34 @@ class MealieClient:
     def whoami(self) -> dict[str, Any]:
         return self._request("GET", "/api/users/self", action="whoami")
 
+    def _self_id(self) -> str:
+        if self._self_user_id is None:
+            user = self.whoami()
+            self._self_user_id = str(user["id"])
+        return self._self_user_id
+
+    def set_recipe_rating(
+        self,
+        slug: str,
+        *,
+        rating: float | None = None,
+        is_favorite: bool | None = None,
+    ) -> Any:
+        body: dict[str, Any] = {}
+        if rating is not None:
+            body["rating"] = rating
+        if is_favorite is not None:
+            body["isFavorite"] = is_favorite
+        if not body:
+            raise MealieError("set_recipe_rating called with nothing to set.")
+        user_id = self._self_id()
+        return self._request(
+            "POST",
+            f"/api/users/{user_id}/ratings/{slug}",
+            json=body,
+            action=f"set_recipe_rating({slug})",
+        )
+
     # ------------------------------------------------------------------
     # Recipes
     # ------------------------------------------------------------------
@@ -118,7 +147,7 @@ class MealieClient:
     def create_recipe_from_url(self, url: str, *, include_tags: bool = False) -> str:
         result = self._request(
             "POST",
-            "/api/recipes/create-url",
+            "/api/recipes/create/url",
             json={"url": url, "includeTags": include_tags},
             action="create_recipe_from_url",
         )
@@ -175,10 +204,12 @@ class MealieClient:
     ) -> dict[str, Any]:
         if not patch:
             raise MealieError("update_cookbook called with no fields to update.")
+        current = self.get_cookbook(cookbook_id)
+        body = {**current, **patch}
         return self._request(
-            "PATCH",
+            "PUT",
             f"/api/households/cookbooks/{cookbook_id}",
-            json=patch,
+            json=body,
             action=f"update_cookbook({cookbook_id})",
         )
 
@@ -233,10 +264,12 @@ class MealieClient:
     ) -> dict[str, Any]:
         if not patch:
             raise MealieError("update_mealplan called with no fields to update.")
+        current = self.get_mealplan(mealplan_id)
+        body = {**current, **patch}
         return self._request(
-            "PATCH",
+            "PUT",
             f"/api/households/mealplans/{mealplan_id}",
-            json=patch,
+            json=body,
             action=f"update_mealplan({mealplan_id})",
         )
 
@@ -281,10 +314,12 @@ class MealieClient:
     ) -> dict[str, Any]:
         if not patch:
             raise MealieError("update_mealplan_rule called with no fields to update.")
+        current = self.get_mealplan_rule(rule_id)
+        body = {**current, **patch}
         return self._request(
-            "PATCH",
+            "PUT",
             f"/api/households/mealplans/rules/{rule_id}",
-            json=patch,
+            json=body,
             action=f"update_mealplan_rule({rule_id})",
         )
 
@@ -329,10 +364,12 @@ class MealieClient:
     ) -> dict[str, Any]:
         if not patch:
             raise MealieError("update_shopping_list called with no fields to update.")
+        current = self.get_shopping_list(list_id)
+        body = {**current, **patch}
         return self._request(
-            "PATCH",
+            "PUT",
             f"/api/households/shopping/lists/{list_id}",
-            json=patch,
+            json=body,
             action=f"update_shopping_list({list_id})",
         )
 
@@ -358,8 +395,8 @@ class MealieClient:
 
     def remove_recipe_from_shopping_list(self, list_id: str, recipe_id: str) -> Any:
         return self._request(
-            "DELETE",
-            f"/api/households/shopping/lists/{list_id}/recipe/{recipe_id}",
+            "POST",
+            f"/api/households/shopping/lists/{list_id}/recipe/{recipe_id}/delete",
             action=f"remove_recipe_from_shopping_list({list_id},{recipe_id})",
         )
 
@@ -412,10 +449,12 @@ class MealieClient:
     ) -> dict[str, Any]:
         if not patch:
             raise MealieError("update_shopping_item called with no fields to update.")
+        current = self.get_shopping_item(item_id)
+        body = {**current, **patch}
         return self._request(
-            "PATCH",
+            "PUT",
             f"/api/households/shopping/items/{item_id}",
-            json=patch,
+            json=body,
             action=f"update_shopping_item({item_id})",
         )
 
@@ -448,16 +487,6 @@ class MealieClient:
             action="parse_ingredients",
         )
 
-    def parse_recipe_ingredients(
-        self, slug: str, *, parser: str = "nlp"
-    ) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            f"/api/recipes/{slug}/ingredients/parse-ingredients",
-            json={"parser": parser},
-            action=f"parse_recipe_ingredients({slug})",
-        )
-
     # ------------------------------------------------------------------
     # Generic taxonomy CRUD (categories / tags / tools)
     # ------------------------------------------------------------------
@@ -485,26 +514,32 @@ class MealieClient:
     ) -> dict[str, Any]:
         if not patch:
             raise MealieError(f"{action} called with no fields to update.")
-        return self._request("PATCH", f"{path}/{item_id}", json=patch, action=action)
+        current = self._taxonomy_get(path, item_id, f"{action}:fetch-current")
+        body = {**current, **patch}
+        return self._request("PUT", f"{path}/{item_id}", json=body, action=action)
 
     def _taxonomy_delete(self, path: str, item_id: str, action: str) -> Any:
         return self._request("DELETE", f"{path}/{item_id}", action=action)
 
     # Categories
     def list_categories(self, *, page: int = 1, per_page: int = 100):
-        return self._taxonomy_list("/api/categories", page, per_page, "list_categories")
+        return self._taxonomy_list(
+            "/api/organizers/categories", page, per_page, "list_categories"
+        )
 
     def get_category(self, category_id: str):
         return self._taxonomy_get(
-            "/api/categories", category_id, f"get_category({category_id})"
+            "/api/organizers/categories", category_id, f"get_category({category_id})"
         )
 
     def create_category(self, body: dict[str, Any]):
-        return self._taxonomy_create("/api/categories", body, "create_category")
+        return self._taxonomy_create(
+            "/api/organizers/categories", body, "create_category"
+        )
 
     def update_category(self, category_id: str, patch: dict[str, Any]):
         return self._taxonomy_update(
-            "/api/categories",
+            "/api/organizers/categories",
             category_id,
             patch,
             f"update_category({category_id})",
@@ -512,44 +547,52 @@ class MealieClient:
 
     def delete_category(self, category_id: str):
         return self._taxonomy_delete(
-            "/api/categories", category_id, f"delete_category({category_id})"
+            "/api/organizers/categories", category_id, f"delete_category({category_id})"
         )
 
     # Tags
     def list_tags(self, *, page: int = 1, per_page: int = 100):
-        return self._taxonomy_list("/api/tags", page, per_page, "list_tags")
+        return self._taxonomy_list("/api/organizers/tags", page, per_page, "list_tags")
 
     def get_tag(self, tag_id: str):
-        return self._taxonomy_get("/api/tags", tag_id, f"get_tag({tag_id})")
+        return self._taxonomy_get("/api/organizers/tags", tag_id, f"get_tag({tag_id})")
 
     def create_tag(self, body: dict[str, Any]):
-        return self._taxonomy_create("/api/tags", body, "create_tag")
+        return self._taxonomy_create("/api/organizers/tags", body, "create_tag")
 
     def update_tag(self, tag_id: str, patch: dict[str, Any]):
         return self._taxonomy_update(
-            "/api/tags", tag_id, patch, f"update_tag({tag_id})"
+            "/api/organizers/tags", tag_id, patch, f"update_tag({tag_id})"
         )
 
     def delete_tag(self, tag_id: str):
-        return self._taxonomy_delete("/api/tags", tag_id, f"delete_tag({tag_id})")
+        return self._taxonomy_delete(
+            "/api/organizers/tags", tag_id, f"delete_tag({tag_id})"
+        )
 
     # Tools
     def list_tools(self, *, page: int = 1, per_page: int = 100):
-        return self._taxonomy_list("/api/tools", page, per_page, "list_tools")
+        return self._taxonomy_list(
+            "/api/organizers/tools", page, per_page, "list_tools"
+        )
 
     def get_tool(self, tool_id: str):
-        return self._taxonomy_get("/api/tools", tool_id, f"get_tool({tool_id})")
+        return self._taxonomy_get(
+            "/api/organizers/tools", tool_id, f"get_tool({tool_id})"
+        )
 
     def create_tool(self, body: dict[str, Any]):
-        return self._taxonomy_create("/api/tools", body, "create_tool")
+        return self._taxonomy_create("/api/organizers/tools", body, "create_tool")
 
     def update_tool(self, tool_id: str, patch: dict[str, Any]):
         return self._taxonomy_update(
-            "/api/tools", tool_id, patch, f"update_tool({tool_id})"
+            "/api/organizers/tools", tool_id, patch, f"update_tool({tool_id})"
         )
 
     def delete_tool(self, tool_id: str):
-        return self._taxonomy_delete("/api/tools", tool_id, f"delete_tool({tool_id})")
+        return self._taxonomy_delete(
+            "/api/organizers/tools", tool_id, f"delete_tool({tool_id})"
+        )
 
     # Foods
     def list_foods(self, *, page: int = 1, per_page: int = 100):

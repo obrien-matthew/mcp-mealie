@@ -15,6 +15,7 @@ from .formatting import (
     format_mealplan_rule,
     format_page,
     format_parsed_ingredient,
+    format_recipe_attach,
     format_recipe_full,
     format_recipe_page,
     format_shopping_item,
@@ -151,10 +152,14 @@ def update_recipe(
     prep_time: str = "",
     perform_time: str = "",
     total_time: str = "",
-    rating: int = -1,
     org_url: str = "",
 ) -> str:
-    """Patch a recipe. Only non-empty / non-default fields are sent."""
+    """Patch a recipe. Only non-empty fields are sent.
+
+    Note: rating is per-user in Mealie 2.x+ and is not exposed here. Set it
+    via the Mealie UI (or a future dedicated tool) against
+    POST /api/users/{user_id}/ratings/{slug}.
+    """
     try:
         slug = validate_slug(slug)
         patch: dict[str, Any] = {}
@@ -170,8 +175,6 @@ def update_recipe(
             patch["performTime"] = perform_time
         if total_time:
             patch["totalTime"] = total_time
-        if rating >= 0:
-            patch["rating"] = rating
         if org_url:
             patch["orgURL"] = validate_url(org_url)
         if not patch:
@@ -190,6 +193,31 @@ def delete_recipe(slug: str) -> str:
         return _dump({"deleted": slug})
     except Exception as exc:
         return _error("delete_recipe", exc)
+
+
+@mcp.tool()
+def set_recipe_rating(
+    slug: str,
+    rating: float = -1.0,
+    is_favorite: int = -1,
+) -> str:
+    """Set the calling user's rating and/or favorite flag for a recipe.
+
+    rating: 0-5 (decimals allowed). Pass -1 to leave unchanged.
+    is_favorite: 0=remove, 1=add. Pass -1 to leave unchanged.
+    """
+    try:
+        slug = validate_slug(slug)
+        rating_val: float | None = rating if rating >= 0 else None
+        favorite_val: bool | None = bool(is_favorite) if is_favorite in (0, 1) else None
+        if rating_val is None and favorite_val is None:
+            raise ValueError("set_recipe_rating called with nothing to change.")
+        _get_client().set_recipe_rating(
+            slug, rating=rating_val, is_favorite=favorite_val
+        )
+        return _dump({"slug": slug, "rating": rating_val, "is_favorite": favorite_val})
+    except Exception as exc:
+        return _error("set_recipe_rating", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -549,7 +577,7 @@ def add_recipe_to_shopping_list(list_id: str, recipe_id: str, scale: int = 1) ->
         result = _get_client().add_recipe_to_shopping_list(
             list_id, recipe_id, scale=scale if scale != 1 else None
         )
-        return _dump({"list_id": list_id, "recipe_id": recipe_id, "result": result})
+        return _dump(format_recipe_attach(list_id, recipe_id, result))
     except Exception as exc:
         return _error("add_recipe_to_shopping_list", exc)
 
@@ -627,6 +655,11 @@ def create_shopping_item(
         if label_id:
             body["labelId"] = validate_uuid(label_id, "label_id")
         result = _get_client().create_shopping_item(body)
+        if isinstance(result, dict) and "createdItems" in result:
+            created = result.get("createdItems") or []
+            if len(created) == 1:
+                return _dump(format_shopping_item(created[0]))
+            return _dump([format_shopping_item(i) for i in created])
         if isinstance(result, list):
             return _dump([format_shopping_item(i) for i in result])
         return _dump(format_shopping_item(result))
@@ -646,6 +679,9 @@ def create_shopping_items_bulk(items_json: str) -> str:
         if not isinstance(items, list) or not items:
             raise ValueError("items_json must be a non-empty JSON array.")
         result = _get_client().create_shopping_items_bulk(items)
+        if isinstance(result, dict) and "createdItems" in result:
+            created = result.get("createdItems") or []
+            return _dump([format_shopping_item(i) for i in created])
         if isinstance(result, list):
             return _dump([format_shopping_item(i) for i in result])
         return _dump(result)
@@ -739,17 +775,6 @@ def parse_ingredients(ingredients_json: str, parser: str = "nlp") -> str:
         return _dump([format_parsed_ingredient(p) for p in result])
     except Exception as exc:
         return _error("parse_ingredients", exc)
-
-
-@mcp.tool()
-def parse_recipe_ingredients(slug: str, parser: str = "nlp") -> str:
-    """Re-parse and store all ingredients for a recipe by slug."""
-    try:
-        slug = validate_slug(slug)
-        parser = validate_parser(parser)
-        return _dump(_get_client().parse_recipe_ingredients(slug, parser=parser))
-    except Exception as exc:
-        return _error("parse_recipe_ingredients", exc)
 
 
 # ---------------------------------------------------------------------------

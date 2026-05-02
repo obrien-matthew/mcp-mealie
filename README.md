@@ -65,7 +65,7 @@ claude mcp add mealie \
 | `get_about`  | Server version / health (no auth path) |
 | `whoami`     | Confirm the token works                |
 
-### Recipes (full CRUD + scrape)
+### Recipes (full CRUD + scrape + rating)
 | Tool                      | Description                                  |
 | ------------------------- | -------------------------------------------- |
 | `list_recipes`            | Paginated list with search and ordering      |
@@ -73,6 +73,7 @@ claude mcp add mealie \
 | `create_recipe`           | Empty recipe by name                         |
 | `create_recipe_from_url`  | Scrape from a URL                            |
 | `update_recipe`           | Patch common fields                          |
+| `set_recipe_rating`       | Per-user rating / favorite                   |
 | `delete_recipe`           | Delete by slug                               |
 
 ### Cookbooks (full CRUD)
@@ -130,7 +131,6 @@ Used by Mealie's random-meal generator.
 | --------------------------- | ------------------------------------------------- |
 | `parse_ingredient`          | One string → quantity/unit/food                   |
 | `parse_ingredients`         | JSON array of strings → list of parsed results    |
-| `parse_recipe_ingredients`  | Re-parse and store all ingredients on a recipe    |
 
 ### Taxonomy (full CRUD per resource)
 

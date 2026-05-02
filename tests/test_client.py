@@ -117,6 +117,37 @@ class TestDeleteRecipe:
         assert args == ("DELETE", "/api/recipes/tacos")
 
 
+class TestSetRecipeRating:
+    def test_resolves_user_id_then_posts(self, client):
+        client._http.request.side_effect = [
+            _json_response({"id": "user-uuid"}),
+            _json_response({"ok": True}),
+        ]
+        client.set_recipe_rating("tacos", rating=4.5)
+        last_args, last_kwargs = client._http.request.call_args
+        assert last_args == ("POST", "/api/users/user-uuid/ratings/tacos")
+        assert last_kwargs["json"] == {"rating": 4.5}
+
+    def test_caches_user_id(self, client):
+        client._http.request.side_effect = [
+            _json_response({"id": "user-uuid"}),
+            _json_response({"ok": True}),
+            _json_response({"ok": True}),
+        ]
+        client.set_recipe_rating("a", rating=5)
+        client.set_recipe_rating("b", is_favorite=True)
+        # whoami should only have been called once
+        whoami_calls = [
+            c for c in client._http.request.call_args_list if c.args[0] == "GET"
+        ]
+        assert len(whoami_calls) == 1
+
+    def test_rejects_empty(self, client):
+        client._http.request.return_value = _json_response({"id": "user-uuid"})
+        with pytest.raises(MealieError, match="nothing to set"):
+            client.set_recipe_rating("tacos", rating=None)
+
+
 class TestCookbooks:
     def test_list_path(self, client):
         client._http.request.return_value = _json_response({"items": []})
@@ -188,7 +219,7 @@ class TestTaxonomy:
         client._http.request.return_value = _json_response({"items": []})
         client.list_categories()
         args, _ = client._http.request.call_args
-        assert args == ("GET", "/api/categories")
+        assert args == ("GET", "/api/organizers/categories")
 
     def test_labels_path(self, client):
         client._http.request.return_value = _json_response({"items": []})
@@ -196,12 +227,19 @@ class TestTaxonomy:
         args, _ = client._http.request.call_args
         assert args == ("GET", "/api/groups/labels")
 
-    def test_food_patch(self, client):
-        client._http.request.return_value = _json_response({"id": "f"})
+    def test_food_put_merges_current(self, client):
+        client._http.request.side_effect = [
+            _json_response({"id": "f", "name": "old", "pluralName": "olds"}),
+            _json_response({"id": "f", "name": "carrot", "pluralName": "olds"}),
+        ]
         client.update_food("f", {"name": "carrot"})
-        args, kwargs = client._http.request.call_args
-        assert args == ("PATCH", "/api/foods/f")
-        assert kwargs["json"] == {"name": "carrot"}
+        last_args, last_kwargs = client._http.request.call_args
+        assert last_args == ("PUT", "/api/foods/f")
+        assert last_kwargs["json"] == {
+            "id": "f",
+            "name": "carrot",
+            "pluralName": "olds",
+        }
 
 
 class TestErrorHandling:

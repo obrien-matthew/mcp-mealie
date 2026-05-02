@@ -9,6 +9,7 @@ from mealie_mcp.formatting import (
     format_mealplan_rule,
     format_page,
     format_parsed_ingredient,
+    format_recipe_attach,
     format_recipe_full,
     format_recipe_page,
     format_recipe_summary,
@@ -226,6 +227,49 @@ class TestFormatShopping:
         )
         assert out["display"] == "carrots, 2"
         assert out["checked"] is False
+
+    def test_recipe_attach_filters_to_added_items(self):
+        response = {
+            "name": "Groceries",
+            "labelSettings": [{"labelId": "noise"} for _ in range(20)],
+            "listItems": [
+                {
+                    "id": "old",
+                    "display": "stale item",
+                    "recipeReferences": [{"recipeId": "other"}],
+                },
+                {
+                    "id": "new",
+                    "display": "new shrimp",
+                    "recipeReferences": [{"recipeId": "r1"}],
+                },
+            ],
+        }
+        out = format_recipe_attach("L", "r1", response)
+        assert out == {
+            "list_id": "L",
+            "recipe_id": "r1",
+            "items_added": 1,
+            "items": [
+                {
+                    "id": "new",
+                    "shopping_list_id": None,
+                    "note": None,
+                    "quantity": None,
+                    "checked": None,
+                    "is_food": None,
+                    "food_id": None,
+                    "unit_id": None,
+                    "label_id": None,
+                    "position": None,
+                    "display": "new shrimp",
+                }
+            ],
+        }
+
+    def test_recipe_attach_handles_non_dict(self):
+        out = format_recipe_attach("L", "r1", None)
+        assert out == {"list_id": "L", "recipe_id": "r1", "items_added": 0}
 
 
 class TestFormatTaxonomy:
