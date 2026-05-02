@@ -1,0 +1,64 @@
+[project]
+name = "mcp-mealie"
+version = "0.1.0"
+description = "MCP server for Mealie"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Matthew O'Brien", email = "matthew@obrien.dev" }
+]
+requires-python = ">=3.14"
+keywords = ["mcp", "mealie", "model-context-protocol"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Internet :: WWW/HTTP",
+]
+dependencies = [
+    "mcp>=1.27.0,<2",
+    "httpx>=0.28.0",
+]
+
+[project.urls]
+Repository = "https://github.com/obrien-matthew/mcp-mealie"
+Issues = "https://github.com/obrien-matthew/mcp-mealie/issues"
+
+[tool.uv.build-backend]
+module-name = "mealie_mcp"
+
+[build-system]
+requires = ["uv_build>=0.11.3,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11.0",
+    "pyright>=1.1.400",
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pyright]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["mealie_mcp"]
+omit = ["src/mealie_mcp/auth.py"]
+
+[project.scripts]
+mcp-mealie = "mealie_mcp:main"

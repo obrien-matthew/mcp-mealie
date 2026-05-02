@@ -1,0 +1,19 @@
+pre-commit:
+  parallel: true
+  commands:
+    ruff-lint:
+      glob: "*.py"
+      run: uv run ruff check {staged_files}
+    ruff-format:
+      glob: "*.py"
+      run: uv run ruff format --check {staged_files}
+    pyright:
+      glob: "*.py"
+      run: uv run pyright {staged_files}
+
+pre-push:
+  commands:
+    test:
+      run: uv run pytest tests/ -x -q
+    check-version-bump:
+      run: bash scripts/check-version-bump.sh

@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Build artifacts
+dist/
+
+# Virtual environments
+.venv
+
+# Environment / credentials
+.env
+
+# Test / coverage
+.coverage
+htmlcov/
+
+# Claude Code
+.claude/
+
+# Plans (local working docs)
+docs/plans/
+
+# OS
+.DS_Store
