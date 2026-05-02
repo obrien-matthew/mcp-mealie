@@ -75,25 +75,34 @@ def _error(action: str, exc: Exception) -> str:
     return _dump({"error": action, "message": str(exc)})
 
 
-# Matches "Title: rest" where the title is a single line, has no internal
-# colons or periods, and is short. Used to auto-split step text into a
-# title field. Long titles or titles containing punctuation that suggests
-# multiple sentences won't match -- those stay as plain text.
-_STEP_TITLE_RE = re.compile(r"^([^:.\n]{1,60}):\s+(.+)$", re.DOTALL)
+# Matches "Header: rest" where the header is a single line, has no internal
+# colons or periods, and is short. Used to auto-split step text into the
+# step's `summary` field (rendered as a per-step header in Mealie's UI).
+# `title` is reserved for section dividers that group multiple steps and
+# is left empty unless the caller passes the dict form with a title.
+_STEP_HEADER_RE = re.compile(r"^([^:.\n]{1,60}):\s+(.+)$", re.DOTALL)
 
 
 def _build_recipe_step(item: Any) -> dict[str, Any]:
-    """Coerce a string or {title, text} dict into a Mealie RecipeStep payload.
+    """Coerce a string or {title, summary, text} dict into a RecipeStep payload.
 
-    Strings ending in "Title: text" are auto-split. Pass an explicit
-    {title: "", text: ...} dict to opt out of auto-splitting.
+    Strings starting with "Header: rest" are auto-split: the header goes
+    into `summary` (per-step header) and the rest into `text`. `title`
+    is left empty so Mealie won't render a section break before the step.
+
+    Pass the dict form for explicit control:
+      - title: section divider rendered above the step
+      - summary: per-step header rendered inside the step card
+      - text: the step body (required)
     """
     if isinstance(item, str):
-        match = _STEP_TITLE_RE.match(item)
-        title = match.group(1).strip() if match else ""
+        match = _STEP_HEADER_RE.match(item)
+        summary = match.group(1).strip() if match else ""
         text = match.group(2).strip() if match else item
+        title = ""
     elif isinstance(item, dict) and "text" in item:
         title = str(item.get("title") or "").strip()
+        summary = str(item.get("summary") or "").strip()
         text = str(item["text"])
     else:
         raise ValueError(
@@ -102,7 +111,7 @@ def _build_recipe_step(item: Any) -> dict[str, Any]:
     return {
         "id": str(uuid.uuid4()),
         "title": title,
-        "summary": "",
+        "summary": summary,
         "text": text,
         "ingredientReferences": [],
     }
@@ -302,13 +311,14 @@ def set_recipe_instructions(slug: str, instructions_json: str) -> str:
     """Replace a recipe's instruction steps with the given lines.
 
     `instructions_json` is a JSON array. Each element is either:
-      - a string ("Boil water"), or
-      - an object ({"title": "Boil", "text": "Boil water"}).
+      - a string ("Boil water: bring 4 quarts to a rolling boil"), or
+      - an object ({"title": "Prep", "summary": "Boil water", "text": "..."})
 
-    Strings starting with a short "Title: rest" prefix are auto-split:
-    "Boil water: bring 4 quarts to a rolling boil" becomes
-    {title: "Boil water", text: "bring 4 quarts..."}. Pass the dict
-    form with an empty title to opt out of auto-splitting.
+    Strings starting with a short "Header: rest" prefix are auto-split:
+    the header goes into the step's `summary` (rendered as a per-step
+    header in Mealie's UI), and the rest goes into `text`. The `title`
+    field is reserved for section dividers between groups of steps and
+    is only set when the dict form provides one.
     """
     try:
         slug = validate_slug(slug)

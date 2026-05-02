@@ -188,14 +188,17 @@ class TestSetRecipeInstructions:
             # id is a uuid4 string
             uuid.UUID(step["id"])
 
-    def test_auto_splits_title_colon_text(self, mock_client):
+    def test_auto_splits_header_into_summary(self, mock_client):
+        # Per-step header goes into `summary`, not `title` (which is
+        # reserved for section dividers). `title` stays empty.
         set_recipe_instructions(
             "soup",
             json.dumps(["Press the tofu: Drain and wrap in a clean towel."]),
         )
         _, patch_arg = mock_client.update_recipe.call_args.args
         step = patch_arg["recipeInstructions"][0]
-        assert step["title"] == "Press the tofu"
+        assert step["title"] == ""
+        assert step["summary"] == "Press the tofu"
         assert step["text"] == "Drain and wrap in a clean towel."
 
     def test_does_not_split_long_or_punctuated_prefix(self, mock_client):
@@ -209,19 +212,27 @@ class TestSetRecipeInstructions:
         _, patch_arg = mock_client.update_recipe.call_args.args
         step = patch_arg["recipeInstructions"][0]
         assert step["title"] == ""
+        assert step["summary"] == ""
         assert step["text"] == prose
 
     def test_accepts_explicit_dict_form(self, mock_client):
         set_recipe_instructions(
             "soup",
             json.dumps(
-                [{"title": "Cook the steak: medium rare", "text": "Sear 3 min/side"}]
+                [
+                    {
+                        "title": "Steak section",
+                        "summary": "Cook the steak",
+                        "text": "Sear 3 min/side",
+                    }
+                ]
             ),
         )
         _, patch_arg = mock_client.update_recipe.call_args.args
         step = patch_arg["recipeInstructions"][0]
-        # Dict form is taken verbatim -- no auto-split on the title.
-        assert step["title"] == "Cook the steak: medium rare"
+        # Dict form is taken verbatim -- no auto-split.
+        assert step["title"] == "Steak section"
+        assert step["summary"] == "Cook the steak"
         assert step["text"] == "Sear 3 min/side"
 
     def test_rejects_empty(self, mock_client):
