@@ -65,16 +65,19 @@ claude mcp add mealie \
 | `get_about`  | Server version / health (no auth path) |
 | `whoami`     | Confirm the token works                |
 
-### Recipes (full CRUD + scrape + rating)
-| Tool                      | Description                                  |
-| ------------------------- | -------------------------------------------- |
-| `list_recipes`            | Paginated list with search and ordering      |
-| `get_recipe`              | Full recipe by slug                          |
-| `create_recipe`           | Empty recipe by name                         |
-| `create_recipe_from_url`  | Scrape from a URL                            |
-| `update_recipe`           | Patch common fields                          |
-| `set_recipe_rating`       | Per-user rating / favorite                   |
-| `delete_recipe`           | Delete by slug                               |
+### Recipes (full CRUD + scrape + rating + content)
+| Tool                       | Description                                   |
+| -------------------------- | --------------------------------------------- |
+| `list_recipes`             | Paginated list with search and ordering       |
+| `get_recipe`               | Full recipe by slug                           |
+| `create_recipe`            | Empty recipe by name                          |
+| `create_recipe_from_url`   | Scrape from a URL                             |
+| `update_recipe`            | Patch common metadata fields                  |
+| `set_recipe_ingredients`   | Replace ingredient list (JSON array of lines) |
+| `set_recipe_instructions`  | Replace step list (JSON array of lines)       |
+| `set_recipe_notes`         | Replace notes (JSON array of {title,text})    |
+| `set_recipe_rating`        | Per-user rating / favorite                    |
+| `delete_recipe`            | Delete by slug                                |
 
 ### Cookbooks (full CRUD)
 | Tool                | Description                                          |

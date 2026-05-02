@@ -220,6 +220,92 @@ def set_recipe_rating(
         return _error("set_recipe_rating", exc)
 
 
+@mcp.tool()
+def set_recipe_ingredients(slug: str, ingredients_json: str) -> str:
+    """Replace a recipe's ingredient list with the given lines.
+
+    `ingredients_json` is a JSON array of strings, one per ingredient
+    (e.g. `["1 cup flour", "2 eggs"]`). Each string is stored verbatim;
+    the user can re-parse to structured quantity/unit/food in the
+    Mealie UI afterward to enable shopping-list integration.
+    """
+    try:
+        slug = validate_slug(slug)
+        items = json.loads(ingredients_json)
+        if not isinstance(items, list) or not all(isinstance(s, str) for s in items):
+            raise ValueError("ingredients_json must be a JSON array of strings.")
+        if not items:
+            raise ValueError("ingredients_json cannot be empty.")
+        recipe_ingredient = [
+            {"note": s, "display": s, "originalText": s} for s in items
+        ]
+        return _dump(
+            format_recipe_full(
+                _get_client().update_recipe(
+                    slug, {"recipeIngredient": recipe_ingredient}
+                )
+            )
+        )
+    except Exception as exc:
+        return _error("set_recipe_ingredients", exc)
+
+
+@mcp.tool()
+def set_recipe_instructions(slug: str, instructions_json: str) -> str:
+    """Replace a recipe's instruction steps with the given lines.
+
+    `instructions_json` is a JSON array of strings, one per step
+    (e.g. `["Boil water", "Add pasta and cook 8 minutes"]`).
+    """
+    try:
+        slug = validate_slug(slug)
+        steps = json.loads(instructions_json)
+        if not isinstance(steps, list) or not all(isinstance(s, str) for s in steps):
+            raise ValueError("instructions_json must be a JSON array of strings.")
+        if not steps:
+            raise ValueError("instructions_json cannot be empty.")
+        recipe_instructions = [{"text": s} for s in steps]
+        return _dump(
+            format_recipe_full(
+                _get_client().update_recipe(
+                    slug, {"recipeInstructions": recipe_instructions}
+                )
+            )
+        )
+    except Exception as exc:
+        return _error("set_recipe_instructions", exc)
+
+
+@mcp.tool()
+def set_recipe_notes(slug: str, notes_json: str) -> str:
+    """Replace a recipe's notes with the given JSON array.
+
+    `notes_json` is a JSON array of `{title, text}` objects. `title`
+    is optional; `text` is required. Example:
+    `[{"title": "Tip", "text": "Toast the spices first."}]`.
+    """
+    try:
+        slug = validate_slug(slug)
+        raw = json.loads(notes_json)
+        if not isinstance(raw, list):
+            raise ValueError("notes_json must be a JSON array.")
+        if not raw:
+            raise ValueError("notes_json cannot be empty.")
+        notes: list[dict[str, str]] = []
+        for n in raw:
+            if not isinstance(n, dict) or "text" not in n:
+                raise ValueError("each note must be an object with at least 'text'.")
+            note: dict[str, str] = {"text": str(n["text"])}
+            if n.get("title"):
+                note["title"] = str(n["title"])
+            notes.append(note)
+        return _dump(
+            format_recipe_full(_get_client().update_recipe(slug, {"notes": notes}))
+        )
+    except Exception as exc:
+        return _error("set_recipe_notes", exc)
+
+
 # ---------------------------------------------------------------------------
 # Cookbooks
 # ---------------------------------------------------------------------------

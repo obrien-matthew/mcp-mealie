@@ -1,6 +1,16 @@
 """Tests for MCP server setup."""
 
-from mealie_mcp.server import mcp
+import json
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from mealie_mcp.server import (
+    mcp,
+    set_recipe_ingredients,
+    set_recipe_instructions,
+    set_recipe_notes,
+)
 
 
 class TestServerCreation:
@@ -24,6 +34,9 @@ class TestRegisteredTools:
         "update_recipe",
         "delete_recipe",
         "set_recipe_rating",
+        "set_recipe_ingredients",
+        "set_recipe_instructions",
+        "set_recipe_notes",
         # cookbooks
         "list_cookbooks",
         "get_cookbook",
@@ -108,3 +121,81 @@ class TestRegisteredTools:
         names = asyncio.run(self._tool_names())
         missing = self.EXPECTED - names
         assert not missing, f"missing tools: {missing}"
+
+
+@pytest.fixture
+def mock_client():
+    """Patch _get_client to return a MagicMock; yield the mock."""
+    fake = MagicMock()
+    fake.update_recipe.return_value = {"slug": "soup", "name": "Soup"}
+    with patch("mealie_mcp.server._get_client", return_value=fake):
+        yield fake
+
+
+class TestSetRecipeIngredients:
+    def test_builds_patch(self, mock_client):
+        set_recipe_ingredients("soup", json.dumps(["1 cup flour", "2 eggs"]))
+        slug, patch_arg = mock_client.update_recipe.call_args.args
+        assert slug == "soup"
+        assert patch_arg == {
+            "recipeIngredient": [
+                {
+                    "note": "1 cup flour",
+                    "display": "1 cup flour",
+                    "originalText": "1 cup flour",
+                },
+                {"note": "2 eggs", "display": "2 eggs", "originalText": "2 eggs"},
+            ]
+        }
+
+    def test_rejects_empty(self, mock_client):
+        result = set_recipe_ingredients("soup", "[]")
+        assert "cannot be empty" in result
+        mock_client.update_recipe.assert_not_called()
+
+    def test_rejects_non_strings(self, mock_client):
+        result = set_recipe_ingredients("soup", "[1, 2]")
+        assert "JSON array of strings" in result
+        mock_client.update_recipe.assert_not_called()
+
+
+class TestSetRecipeInstructions:
+    def test_builds_patch(self, mock_client):
+        set_recipe_instructions("soup", json.dumps(["Boil water", "Add carrots"]))
+        _, patch_arg = mock_client.update_recipe.call_args.args
+        assert patch_arg == {
+            "recipeInstructions": [
+                {"text": "Boil water"},
+                {"text": "Add carrots"},
+            ]
+        }
+
+    def test_rejects_empty(self, mock_client):
+        result = set_recipe_instructions("soup", "[]")
+        assert "cannot be empty" in result
+        mock_client.update_recipe.assert_not_called()
+
+
+class TestSetRecipeNotes:
+    def test_builds_patch_with_titles(self, mock_client):
+        set_recipe_notes(
+            "soup",
+            json.dumps(
+                [
+                    {"title": "Tip", "text": "Toast spices first."},
+                    {"text": "Untitled note."},
+                ]
+            ),
+        )
+        _, patch_arg = mock_client.update_recipe.call_args.args
+        assert patch_arg == {
+            "notes": [
+                {"text": "Toast spices first.", "title": "Tip"},
+                {"text": "Untitled note."},
+            ]
+        }
+
+    def test_rejects_missing_text(self, mock_client):
+        result = set_recipe_notes("soup", json.dumps([{"title": "T"}]))
+        assert "with at least 'text'" in result
+        mock_client.update_recipe.assert_not_called()
