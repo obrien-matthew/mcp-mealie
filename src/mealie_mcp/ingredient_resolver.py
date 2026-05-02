@@ -118,24 +118,28 @@ class IngredientResolver:
     ) -> dict[str, Any]:
         """Map a parse_ingredient response to a Mealie recipeIngredient.
 
+        Mealie's parser returns `food` and `unit` as either strings (food
+        name) or objects (`{id, name, ...}` — populated id means Mealie's
+        parser already matched against an existing food/unit, in which
+        case we use that id directly and skip our resolver lookup).
+
         On low confidence (or parse failure) returns a free-text note
-        ingredient with food=None / unit=None / quantity=None so the
-        recipe still renders the line verbatim.
+        ingredient so the recipe still renders the line verbatim.
         """
         ingredient = (parser_response or {}).get("ingredient") or {}
         confidence = (parser_response or {}).get("confidence") or {}
 
-        food_name = ingredient.get("food") or ""
-        unit_name = ingredient.get("unit") or ""
+        food_ref = self._coerce_ref(ingredient.get("food"))
+        unit_ref = self._coerce_ref(ingredient.get("unit"))
         quantity = ingredient.get("quantity")
         note = ingredient.get("note") or ""
         avg_conf = float(confidence.get("average") or 0.0)
 
-        if avg_conf < self._min_confidence or not food_name:
+        if avg_conf < self._min_confidence or not food_ref:
             return self._free_text_ingredient(original_text)
 
-        food = self.or_create_food(food_name)
-        unit = self.or_create_unit(unit_name) if unit_name else None
+        food = self._resolve_ref(food_ref, kind="food")
+        unit = self._resolve_ref(unit_ref, kind="unit") if unit_ref else None
 
         display_parts = [
             str(quantity) if quantity else "",
@@ -145,17 +149,45 @@ class IngredientResolver:
         ]
         display = " ".join(p for p in display_parts if p).strip()
 
-        payload: dict[str, Any] = {
+        return {
             "quantity": quantity,
-            "unit": {"id": unit["id"], "name": unit["name"]} if unit else None,
-            "food": {"id": food["id"], "name": food["name"]},
+            "unit": {"id": unit["id"], "name": unit.get("name", "")} if unit else None,
+            "food": {"id": food["id"], "name": food.get("name", "")},
             "note": note,
             "isFood": True,
             "disableAmount": False,
             "display": display,
             "originalText": original_text,
         }
-        return payload
+
+    @staticmethod
+    def _coerce_ref(value: Any) -> dict[str, Any] | None:
+        """Normalize parser's food/unit value to {id?, name} or None.
+
+        Mealie's parser may return either a string name or a full object
+        depending on whether it matched an existing record. We collapse
+        to a uniform shape here.
+        """
+        if not value:
+            return None
+        if isinstance(value, str):
+            name = value.strip()
+            return {"name": name} if name else None
+        if isinstance(value, dict):
+            name = (value.get("name") or "").strip()
+            ref: dict[str, Any] = {"name": name}
+            if value.get("id"):
+                ref["id"] = value["id"]
+            return ref if name or ref.get("id") else None
+        return None
+
+    def _resolve_ref(self, ref: dict[str, Any], *, kind: str) -> dict[str, Any]:
+        """If Mealie already gave us an id, trust it. Otherwise resolve by name."""
+        if ref.get("id"):
+            return {"id": ref["id"], "name": ref.get("name", "")}
+        if kind == "food":
+            return self.or_create_food(ref["name"])
+        return self.or_create_unit(ref["name"])
 
     @staticmethod
     def _free_text_ingredient(text: str) -> dict[str, Any]:

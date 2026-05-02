@@ -16,8 +16,8 @@ def _make_client(*, foods=None, units=None) -> MagicMock:
 
 def _parser_response(
     *,
-    food: str | None,
-    unit: str | None,
+    food: str | dict | None,
+    unit: str | dict | None,
     quantity: float | None,
     note: str = "",
     confidence: float = 0.99,
@@ -102,7 +102,7 @@ class TestUnitIndex:
 
 
 class TestToRecipeIngredient:
-    def test_binds_food_and_unit(self):
+    def test_binds_food_and_unit_from_string_names(self):
         client = _make_client(
             foods=[{"id": "f1", "name": "shrimp"}],
             units=[{"id": "u1", "name": "pound"}],
@@ -117,6 +117,42 @@ class TestToRecipeIngredient:
         assert out["quantity"] == 1.0
         assert out["isFood"] is True
         assert out["originalText"] == "1 lb shrimp"
+
+    def test_trusts_mealie_id_when_present(self):
+        # When Mealie's parser already matched against an existing
+        # record, it returns {id, name, ...}. We should use that id
+        # directly, not re-look up via our own index.
+        client = _make_client(foods=[], units=[])
+        r = IngredientResolver(client)
+        out = r.to_recipe_ingredient(
+            _parser_response(
+                food={"id": "f-from-mealie", "name": "shrimp"},
+                unit={"id": "u-from-mealie", "name": "pound"},
+                quantity=1.0,
+            ),
+            original_text="1 lb shrimp",
+        )
+        assert out["food"]["id"] == "f-from-mealie"
+        assert out["unit"]["id"] == "u-from-mealie"
+        client.create_food.assert_not_called()
+        client.create_unit.assert_not_called()
+
+    def test_resolves_dict_without_id_via_index(self):
+        client = _make_client(
+            foods=[{"id": "f1", "name": "shrimp"}],
+            units=[{"id": "u1", "name": "pound"}],
+        )
+        r = IngredientResolver(client)
+        out = r.to_recipe_ingredient(
+            _parser_response(
+                food={"name": "shrimp"},
+                unit={"name": "pound"},
+                quantity=1.0,
+            ),
+            original_text="1 lb shrimp",
+        )
+        assert out["food"]["id"] == "f1"
+        assert out["unit"]["id"] == "u1"
 
     def test_unitless_ingredient(self):
         client = _make_client(foods=[{"id": "f1", "name": "egg"}])
