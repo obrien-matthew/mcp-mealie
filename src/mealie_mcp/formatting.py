@@ -88,7 +88,12 @@ def format_recipe_full(r: dict[str, Any]) -> dict[str, Any]:
             for i in (r.get("recipeIngredient") or [])
         ],
         "instructions": [
-            s.get("text", "") for s in (r.get("recipeInstructions") or [])
+            {
+                "title": s.get("title") or "",
+                "summary": s.get("summary") or "",
+                "text": s.get("text") or "",
+            }
+            for s in (r.get("recipeInstructions") or [])
         ],
         "tags": [t.get("name") for t in (r.get("tags") or []) if t.get("name")],
         "categories": [

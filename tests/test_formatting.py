@@ -99,14 +99,25 @@ class TestFormatRecipeFull:
                     {"note": "salt to taste"},
                 ],
                 "recipeInstructions": [
-                    {"text": "Boil water"},
+                    {
+                        "title": "Prep",
+                        "summary": "Boil water",
+                        "text": "Bring 4 quarts to a rolling boil",
+                    },
                     {"text": "Add carrots"},
                 ],
                 "tools": [{"name": "Pot"}],
             }
         )
         assert out["ingredients"] == ["1 cup carrots", "salt to taste"]
-        assert out["instructions"] == ["Boil water", "Add carrots"]
+        assert out["instructions"] == [
+            {
+                "title": "Prep",
+                "summary": "Boil water",
+                "text": "Bring 4 quarts to a rolling boil",
+            },
+            {"title": "", "summary": "", "text": "Add carrots"},
+        ]
         assert out["tools"] == ["Pot"]
 
 
