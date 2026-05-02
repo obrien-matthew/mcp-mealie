@@ -3,12 +3,19 @@
 import pytest
 
 from mealie_mcp.validation import (
+    validate_day_of_week,
+    validate_entry_type,
+    validate_iso_date,
     validate_limit,
     validate_non_empty,
     validate_page,
+    validate_parser,
     validate_slug,
     validate_url,
+    validate_uuid,
 )
+
+_UUID = "11111111-2222-3333-4444-555555555555"
 
 
 class TestValidateLimit:
@@ -88,3 +95,65 @@ class TestValidateNonEmpty:
     def test_rejects_empty(self):
         with pytest.raises(ValueError, match="name cannot be empty"):
             validate_non_empty("   ", "name")
+
+
+class TestValidateUuid:
+    def test_valid(self):
+        assert validate_uuid(_UUID) == _UUID
+
+    def test_uppercase_ok(self):
+        assert validate_uuid(_UUID.upper()) == _UUID.upper()
+
+    def test_rejects_non_uuid(self):
+        with pytest.raises(ValueError, match="UUID"):
+            validate_uuid("not-a-uuid")
+
+    def test_uses_field_name(self):
+        with pytest.raises(ValueError, match="recipe_id"):
+            validate_uuid("nope", "recipe_id")
+
+
+class TestValidateIsoDate:
+    def test_valid(self):
+        assert validate_iso_date("2026-05-02") == "2026-05-02"
+
+    def test_rejects_format(self):
+        with pytest.raises(ValueError, match="YYYY-MM-DD"):
+            validate_iso_date("05/02/2026")
+
+    def test_rejects_invalid_date(self):
+        with pytest.raises(ValueError, match="YYYY-MM-DD"):
+            validate_iso_date("2026-13-99")
+
+
+class TestValidateEntryType:
+    def test_valid(self):
+        assert validate_entry_type("Dinner") == "dinner"
+
+    def test_rejects_unknown(self):
+        with pytest.raises(ValueError, match="entry_type"):
+            validate_entry_type("brunch")
+
+
+class TestValidateDayOfWeek:
+    def test_valid(self):
+        assert validate_day_of_week("Friday") == "friday"
+
+    def test_unset_ok(self):
+        assert validate_day_of_week("unset") == "unset"
+
+    def test_rejects_unknown(self):
+        with pytest.raises(ValueError, match="day"):
+            validate_day_of_week("funday")
+
+
+class TestValidateParser:
+    def test_nlp(self):
+        assert validate_parser("NLP") == "nlp"
+
+    def test_brute(self):
+        assert validate_parser("brute") == "brute"
+
+    def test_rejects_other(self):
+        with pytest.raises(ValueError, match="parser"):
+            validate_parser("magic")

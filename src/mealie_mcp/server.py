@@ -1,4 +1,4 @@
-"""MCP server with Mealie tools for recipe management."""
+"""MCP server with Mealie tools."""
 
 import json
 from typing import Any
@@ -8,16 +8,32 @@ from mcp.server.fastmcp import FastMCP
 from .client import MealieClient, MealieError
 from .formatting import (
     format_about,
+    format_cookbook,
+    format_food,
+    format_label,
+    format_mealplan,
+    format_mealplan_rule,
+    format_page,
+    format_parsed_ingredient,
     format_recipe_full,
     format_recipe_page,
+    format_shopping_item,
+    format_shopping_list,
+    format_taxonomy_item,
+    format_unit,
     format_user,
 )
 from .validation import (
+    validate_day_of_week,
+    validate_entry_type,
+    validate_iso_date,
     validate_limit,
     validate_non_empty,
     validate_page,
+    validate_parser,
     validate_slug,
     validate_url,
+    validate_uuid,
 )
 
 mcp = FastMCP("mcp-mealie")
@@ -80,15 +96,7 @@ def list_recipes(
     order_by: str = "",
     order_direction: str = "",
 ) -> str:
-    """List recipes with optional search and pagination.
-
-    Args:
-        search: Optional substring search across recipe names.
-        page: 1-indexed page number.
-        per_page: Items per page (1-100).
-        order_by: Optional sort field (e.g. "name", "created_at", "rating").
-        order_direction: Optional "asc" or "desc".
-    """
+    """List recipes with optional search, sorting, and pagination."""
     try:
         data = _get_client().list_recipes(
             search=search or None,
@@ -114,11 +122,7 @@ def get_recipe(slug: str) -> str:
 
 @mcp.tool()
 def create_recipe(name: str) -> str:
-    """Create an empty recipe with the given name. Returns the new slug.
-
-    For scraping a recipe from a website, use `create_recipe_from_url`.
-    To populate fields after creation, use `update_recipe` with the slug.
-    """
+    """Create an empty recipe by name. Returns the new slug."""
     try:
         name = validate_non_empty(name, "name")
         slug = _get_client().create_recipe(name)
@@ -129,14 +133,7 @@ def create_recipe(name: str) -> str:
 
 @mcp.tool()
 def create_recipe_from_url(url: str, include_tags: bool = False) -> str:
-    """Scrape a recipe from a URL using Mealie's built-in scraper.
-
-    Args:
-        url: A recipe webpage URL.
-        include_tags: If true, attempt to import keyword tags from the page.
-
-    Returns the new recipe's slug.
-    """
+    """Scrape a recipe from a URL using Mealie's scraper. Returns the new slug."""
     try:
         url = validate_url(url)
         slug = _get_client().create_recipe_from_url(url, include_tags=include_tags)
@@ -157,19 +154,7 @@ def update_recipe(
     rating: int = -1,
     org_url: str = "",
 ) -> str:
-    """Patch a recipe. Only non-empty / non-default fields are sent.
-
-    Args:
-        slug: The recipe's slug (immutable identifier).
-        name: New display name.
-        description: New description / blurb.
-        recipe_yield: e.g. "4 servings".
-        prep_time: Free-form duration string, e.g. "PT15M" or "15 minutes".
-        perform_time: Cook/active time.
-        total_time: Total time.
-        rating: 0-5 (use -1 to leave unchanged).
-        org_url: Source URL for the recipe.
-    """
+    """Patch a recipe. Only non-empty / non-default fields are sent."""
     try:
         slug = validate_slug(slug)
         patch: dict[str, Any] = {}
@@ -190,12 +175,8 @@ def update_recipe(
         if org_url:
             patch["orgURL"] = validate_url(org_url)
         if not patch:
-            raise ValueError(
-                "update_recipe called with no changes. "
-                "Provide at least one field to update."
-            )
-        result = _get_client().update_recipe(slug, patch)
-        return _dump(format_recipe_full(result))
+            raise ValueError("update_recipe called with no changes.")
+        return _dump(format_recipe_full(_get_client().update_recipe(slug, patch)))
     except Exception as exc:
         return _error("update_recipe", exc)
 
@@ -209,3 +190,1060 @@ def delete_recipe(slug: str) -> str:
         return _dump({"deleted": slug})
     except Exception as exc:
         return _error("delete_recipe", exc)
+
+
+# ---------------------------------------------------------------------------
+# Cookbooks
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_cookbooks(page: int = 1, per_page: int = 50) -> str:
+    """List cookbooks (saved recipe filters) for the current household."""
+    try:
+        data = _get_client().list_cookbooks(
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=100),
+        )
+        return _dump(format_page(data, format_cookbook))
+    except Exception as exc:
+        return _error("list_cookbooks", exc)
+
+
+@mcp.tool()
+def get_cookbook(cookbook_id: str) -> str:
+    """Fetch a cookbook by UUID."""
+    try:
+        cookbook_id = validate_uuid(cookbook_id, "cookbook_id")
+        return _dump(format_cookbook(_get_client().get_cookbook(cookbook_id)))
+    except Exception as exc:
+        return _error("get_cookbook", exc)
+
+
+@mcp.tool()
+def create_cookbook(
+    name: str,
+    description: str = "",
+    query_filter_string: str = "",
+    public: bool = False,
+) -> str:
+    """Create a cookbook. `query_filter_string` is the Mealie filter DSL."""
+    try:
+        name = validate_non_empty(name, "name")
+        body: dict[str, Any] = {"name": name, "public": public}
+        if description:
+            body["description"] = description
+        if query_filter_string:
+            body["queryFilterString"] = query_filter_string
+        return _dump(format_cookbook(_get_client().create_cookbook(body)))
+    except Exception as exc:
+        return _error("create_cookbook", exc)
+
+
+@mcp.tool()
+def update_cookbook(
+    cookbook_id: str,
+    name: str = "",
+    description: str = "",
+    query_filter_string: str = "",
+    public: int = -1,
+) -> str:
+    """Patch a cookbook. Use public=1 to make public, public=0 to unpublish."""
+    try:
+        cookbook_id = validate_uuid(cookbook_id, "cookbook_id")
+        patch: dict[str, Any] = {}
+        if name:
+            patch["name"] = name
+        if description:
+            patch["description"] = description
+        if query_filter_string:
+            patch["queryFilterString"] = query_filter_string
+        if public in (0, 1):
+            patch["public"] = bool(public)
+        if not patch:
+            raise ValueError("update_cookbook called with no changes.")
+        return _dump(
+            format_cookbook(_get_client().update_cookbook(cookbook_id, patch))
+        )
+    except Exception as exc:
+        return _error("update_cookbook", exc)
+
+
+@mcp.tool()
+def delete_cookbook(cookbook_id: str) -> str:
+    """Delete a cookbook by UUID."""
+    try:
+        cookbook_id = validate_uuid(cookbook_id, "cookbook_id")
+        _get_client().delete_cookbook(cookbook_id)
+        return _dump({"deleted": cookbook_id})
+    except Exception as exc:
+        return _error("delete_cookbook", exc)
+
+
+# ---------------------------------------------------------------------------
+# Meal plans
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_mealplans(
+    start_date: str = "",
+    end_date: str = "",
+    page: int = 1,
+    per_page: int = 50,
+) -> str:
+    """List meal-plan entries, optionally bounded by start_date/end_date."""
+    try:
+        sd = validate_iso_date(start_date) if start_date else None
+        ed = validate_iso_date(end_date) if end_date else None
+        data = _get_client().list_mealplans(
+            start_date=sd,
+            end_date=ed,
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=200),
+        )
+        return _dump(format_page(data, format_mealplan))
+    except Exception as exc:
+        return _error("list_mealplans", exc)
+
+
+@mcp.tool()
+def get_mealplan(mealplan_id: int) -> str:
+    """Fetch a meal-plan entry by numeric id."""
+    try:
+        return _dump(format_mealplan(_get_client().get_mealplan(mealplan_id)))
+    except Exception as exc:
+        return _error("get_mealplan", exc)
+
+
+@mcp.tool()
+def create_mealplan(
+    date: str,
+    entry_type: str = "dinner",
+    title: str = "",
+    text: str = "",
+    recipe_id: str = "",
+) -> str:
+    """Create a meal-plan entry.
+
+    Supply either `recipe_id` (UUID) for a recipe entry, or `title`/`text`
+    for a freeform entry. `entry_type` is one of: breakfast, lunch, dinner, side.
+    """
+    try:
+        body: dict[str, Any] = {
+            "date": validate_iso_date(date),
+            "entryType": validate_entry_type(entry_type),
+        }
+        if title:
+            body["title"] = title
+        if text:
+            body["text"] = text
+        if recipe_id:
+            body["recipeId"] = validate_uuid(recipe_id, "recipe_id")
+        if not (recipe_id or title):
+            raise ValueError("Provide either recipe_id or title for the meal plan.")
+        return _dump(format_mealplan(_get_client().create_mealplan(body)))
+    except Exception as exc:
+        return _error("create_mealplan", exc)
+
+
+@mcp.tool()
+def update_mealplan(
+    mealplan_id: int,
+    date: str = "",
+    entry_type: str = "",
+    title: str = "",
+    text: str = "",
+    recipe_id: str = "",
+) -> str:
+    """Patch a meal-plan entry. Only non-empty fields are sent."""
+    try:
+        patch: dict[str, Any] = {}
+        if date:
+            patch["date"] = validate_iso_date(date)
+        if entry_type:
+            patch["entryType"] = validate_entry_type(entry_type)
+        if title:
+            patch["title"] = title
+        if text:
+            patch["text"] = text
+        if recipe_id:
+            patch["recipeId"] = validate_uuid(recipe_id, "recipe_id")
+        if not patch:
+            raise ValueError("update_mealplan called with no changes.")
+        return _dump(
+            format_mealplan(_get_client().update_mealplan(mealplan_id, patch))
+        )
+    except Exception as exc:
+        return _error("update_mealplan", exc)
+
+
+@mcp.tool()
+def delete_mealplan(mealplan_id: int) -> str:
+    """Delete a meal-plan entry by id."""
+    try:
+        _get_client().delete_mealplan(mealplan_id)
+        return _dump({"deleted": mealplan_id})
+    except Exception as exc:
+        return _error("delete_mealplan", exc)
+
+
+# ---------------------------------------------------------------------------
+# Meal plan rules
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_mealplan_rules(page: int = 1, per_page: int = 50) -> str:
+    """List meal-plan rules used by the random-meal generator."""
+    try:
+        data = _get_client().list_mealplan_rules(
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=100),
+        )
+        return _dump(format_page(data, format_mealplan_rule))
+    except Exception as exc:
+        return _error("list_mealplan_rules", exc)
+
+
+@mcp.tool()
+def get_mealplan_rule(rule_id: str) -> str:
+    """Fetch a meal-plan rule by UUID."""
+    try:
+        rule_id = validate_uuid(rule_id, "rule_id")
+        return _dump(
+            format_mealplan_rule(_get_client().get_mealplan_rule(rule_id))
+        )
+    except Exception as exc:
+        return _error("get_mealplan_rule", exc)
+
+
+@mcp.tool()
+def create_mealplan_rule(
+    day: str = "unset",
+    entry_type: str = "dinner",
+    query_filter_string: str = "",
+) -> str:
+    """Create a meal-plan rule.
+
+    `day` is monday..sunday or "unset" (any day).
+    `entry_type` is breakfast/lunch/dinner/side.
+    `query_filter_string` is the Mealie filter DSL (e.g. `tags.name = "quick"`).
+    """
+    try:
+        body = {
+            "day": validate_day_of_week(day),
+            "entryType": validate_entry_type(entry_type),
+            "queryFilterString": query_filter_string,
+        }
+        return _dump(
+            format_mealplan_rule(_get_client().create_mealplan_rule(body))
+        )
+    except Exception as exc:
+        return _error("create_mealplan_rule", exc)
+
+
+@mcp.tool()
+def update_mealplan_rule(
+    rule_id: str,
+    day: str = "",
+    entry_type: str = "",
+    query_filter_string: str = "",
+) -> str:
+    """Patch a meal-plan rule."""
+    try:
+        rule_id = validate_uuid(rule_id, "rule_id")
+        patch: dict[str, Any] = {}
+        if day:
+            patch["day"] = validate_day_of_week(day)
+        if entry_type:
+            patch["entryType"] = validate_entry_type(entry_type)
+        if query_filter_string:
+            patch["queryFilterString"] = query_filter_string
+        if not patch:
+            raise ValueError("update_mealplan_rule called with no changes.")
+        return _dump(
+            format_mealplan_rule(
+                _get_client().update_mealplan_rule(rule_id, patch)
+            )
+        )
+    except Exception as exc:
+        return _error("update_mealplan_rule", exc)
+
+
+@mcp.tool()
+def delete_mealplan_rule(rule_id: str) -> str:
+    """Delete a meal-plan rule by UUID."""
+    try:
+        rule_id = validate_uuid(rule_id, "rule_id")
+        _get_client().delete_mealplan_rule(rule_id)
+        return _dump({"deleted": rule_id})
+    except Exception as exc:
+        return _error("delete_mealplan_rule", exc)
+
+
+# ---------------------------------------------------------------------------
+# Shopping lists
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_shopping_lists(page: int = 1, per_page: int = 50) -> str:
+    """List shopping lists for the current household."""
+    try:
+        data = _get_client().list_shopping_lists(
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=100),
+        )
+        return _dump(format_page(data, format_shopping_list))
+    except Exception as exc:
+        return _error("list_shopping_lists", exc)
+
+
+@mcp.tool()
+def get_shopping_list(list_id: str) -> str:
+    """Fetch a shopping list by UUID, including its items."""
+    try:
+        list_id = validate_uuid(list_id, "list_id")
+        return _dump(
+            format_shopping_list(_get_client().get_shopping_list(list_id))
+        )
+    except Exception as exc:
+        return _error("get_shopping_list", exc)
+
+
+@mcp.tool()
+def create_shopping_list(name: str) -> str:
+    """Create a shopping list with the given name."""
+    try:
+        name = validate_non_empty(name, "name")
+        return _dump(
+            format_shopping_list(_get_client().create_shopping_list({"name": name}))
+        )
+    except Exception as exc:
+        return _error("create_shopping_list", exc)
+
+
+@mcp.tool()
+def update_shopping_list(list_id: str, name: str = "") -> str:
+    """Patch a shopping list. Currently supports renaming."""
+    try:
+        list_id = validate_uuid(list_id, "list_id")
+        patch: dict[str, Any] = {}
+        if name:
+            patch["name"] = name
+        if not patch:
+            raise ValueError("update_shopping_list called with no changes.")
+        return _dump(
+            format_shopping_list(
+                _get_client().update_shopping_list(list_id, patch)
+            )
+        )
+    except Exception as exc:
+        return _error("update_shopping_list", exc)
+
+
+@mcp.tool()
+def delete_shopping_list(list_id: str) -> str:
+    """Delete a shopping list by UUID."""
+    try:
+        list_id = validate_uuid(list_id, "list_id")
+        _get_client().delete_shopping_list(list_id)
+        return _dump({"deleted": list_id})
+    except Exception as exc:
+        return _error("delete_shopping_list", exc)
+
+
+@mcp.tool()
+def add_recipe_to_shopping_list(
+    list_id: str, recipe_id: str, scale: int = 1
+) -> str:
+    """Add a recipe's ingredients to a shopping list. `scale` multiplies amounts."""
+    try:
+        list_id = validate_uuid(list_id, "list_id")
+        recipe_id = validate_uuid(recipe_id, "recipe_id")
+        result = _get_client().add_recipe_to_shopping_list(
+            list_id, recipe_id, scale=scale if scale != 1 else None
+        )
+        return _dump({"list_id": list_id, "recipe_id": recipe_id, "result": result})
+    except Exception as exc:
+        return _error("add_recipe_to_shopping_list", exc)
+
+
+@mcp.tool()
+def remove_recipe_from_shopping_list(list_id: str, recipe_id: str) -> str:
+    """Remove a recipe's ingredients from a shopping list."""
+    try:
+        list_id = validate_uuid(list_id, "list_id")
+        recipe_id = validate_uuid(recipe_id, "recipe_id")
+        _get_client().remove_recipe_from_shopping_list(list_id, recipe_id)
+        return _dump({"list_id": list_id, "recipe_id": recipe_id, "removed": True})
+    except Exception as exc:
+        return _error("remove_recipe_from_shopping_list", exc)
+
+
+# ---------------------------------------------------------------------------
+# Shopping items
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_shopping_items(
+    list_id: str = "", page: int = 1, per_page: int = 100
+) -> str:
+    """List shopping items, optionally filtered to one shopping list."""
+    try:
+        lid = validate_uuid(list_id, "list_id") if list_id else None
+        data = _get_client().list_shopping_items(
+            list_id=lid,
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=200),
+        )
+        return _dump(format_page(data, format_shopping_item))
+    except Exception as exc:
+        return _error("list_shopping_items", exc)
+
+
+@mcp.tool()
+def get_shopping_item(item_id: str) -> str:
+    """Fetch a shopping item by UUID."""
+    try:
+        item_id = validate_uuid(item_id, "item_id")
+        return _dump(format_shopping_item(_get_client().get_shopping_item(item_id)))
+    except Exception as exc:
+        return _error("get_shopping_item", exc)
+
+
+@mcp.tool()
+def create_shopping_item(
+    list_id: str,
+    note: str = "",
+    quantity: float = 0.0,
+    is_food: bool = False,
+    food_id: str = "",
+    unit_id: str = "",
+    label_id: str = "",
+) -> str:
+    """Create a single shopping item on a list.
+
+    Free-form items: pass `note` (e.g. "carrots, 2 lb").
+    Structured items: set is_food=true and pass `food_id`, optional `unit_id`.
+    """
+    try:
+        list_id = validate_uuid(list_id, "list_id")
+        body: dict[str, Any] = {
+            "shoppingListId": list_id,
+            "isFood": is_food,
+            "quantity": quantity,
+        }
+        if note:
+            body["note"] = note
+        if food_id:
+            body["foodId"] = validate_uuid(food_id, "food_id")
+        if unit_id:
+            body["unitId"] = validate_uuid(unit_id, "unit_id")
+        if label_id:
+            body["labelId"] = validate_uuid(label_id, "label_id")
+        result = _get_client().create_shopping_item(body)
+        if isinstance(result, list):
+            return _dump([format_shopping_item(i) for i in result])
+        return _dump(format_shopping_item(result))
+    except Exception as exc:
+        return _error("create_shopping_item", exc)
+
+
+@mcp.tool()
+def create_shopping_items_bulk(items_json: str) -> str:
+    """Bulk-create shopping items from a JSON array.
+
+    `items_json` is a JSON array of item objects. Each item must include
+    `shoppingListId` (UUID); `note` and `quantity` are typical optional fields.
+    """
+    try:
+        items = json.loads(items_json)
+        if not isinstance(items, list) or not items:
+            raise ValueError("items_json must be a non-empty JSON array.")
+        result = _get_client().create_shopping_items_bulk(items)
+        if isinstance(result, list):
+            return _dump([format_shopping_item(i) for i in result])
+        return _dump(result)
+    except Exception as exc:
+        return _error("create_shopping_items_bulk", exc)
+
+
+@mcp.tool()
+def update_shopping_item(
+    item_id: str,
+    note: str = "",
+    quantity: float = -1.0,
+    checked: int = -1,
+    position: int = -1,
+    food_id: str = "",
+    unit_id: str = "",
+    label_id: str = "",
+) -> str:
+    """Patch a shopping item. checked: 0=unchecked, 1=checked, -1=leave."""
+    try:
+        item_id = validate_uuid(item_id, "item_id")
+        patch: dict[str, Any] = {}
+        if note:
+            patch["note"] = note
+        if quantity >= 0:
+            patch["quantity"] = quantity
+        if checked in (0, 1):
+            patch["checked"] = bool(checked)
+        if position >= 0:
+            patch["position"] = position
+        if food_id:
+            patch["foodId"] = validate_uuid(food_id, "food_id")
+        if unit_id:
+            patch["unitId"] = validate_uuid(unit_id, "unit_id")
+        if label_id:
+            patch["labelId"] = validate_uuid(label_id, "label_id")
+        if not patch:
+            raise ValueError("update_shopping_item called with no changes.")
+        return _dump(
+            format_shopping_item(
+                _get_client().update_shopping_item(item_id, patch)
+            )
+        )
+    except Exception as exc:
+        return _error("update_shopping_item", exc)
+
+
+@mcp.tool()
+def delete_shopping_item(item_id: str) -> str:
+    """Delete a shopping item by UUID."""
+    try:
+        item_id = validate_uuid(item_id, "item_id")
+        _get_client().delete_shopping_item(item_id)
+        return _dump({"deleted": item_id})
+    except Exception as exc:
+        return _error("delete_shopping_item", exc)
+
+
+# ---------------------------------------------------------------------------
+# Parser
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def parse_ingredient(text: str, parser: str = "nlp") -> str:
+    """Parse a single ingredient string into structured quantity/unit/food.
+
+    `parser` is "nlp" (default, CRF model) or "brute" (regex fallback).
+    """
+    try:
+        text = validate_non_empty(text, "text")
+        parser = validate_parser(parser)
+        return _dump(
+            format_parsed_ingredient(
+                _get_client().parse_ingredient(text, parser=parser)
+            )
+        )
+    except Exception as exc:
+        return _error("parse_ingredient", exc)
+
+
+@mcp.tool()
+def parse_ingredients(ingredients_json: str, parser: str = "nlp") -> str:
+    """Parse many ingredient strings. `ingredients_json` is a JSON string array."""
+    try:
+        items = json.loads(ingredients_json)
+        if not isinstance(items, list) or not all(isinstance(s, str) for s in items):
+            raise ValueError("ingredients_json must be a JSON array of strings.")
+        if not items:
+            raise ValueError("ingredients_json cannot be empty.")
+        parser = validate_parser(parser)
+        result = _get_client().parse_ingredients(items, parser=parser)
+        return _dump([format_parsed_ingredient(p) for p in result])
+    except Exception as exc:
+        return _error("parse_ingredients", exc)
+
+
+@mcp.tool()
+def parse_recipe_ingredients(slug: str, parser: str = "nlp") -> str:
+    """Re-parse and store all ingredients for a recipe by slug."""
+    try:
+        slug = validate_slug(slug)
+        parser = validate_parser(parser)
+        return _dump(
+            _get_client().parse_recipe_ingredients(slug, parser=parser)
+        )
+    except Exception as exc:
+        return _error("parse_recipe_ingredients", exc)
+
+
+# ---------------------------------------------------------------------------
+# Taxonomy: shared helpers for category / tag / tool
+# ---------------------------------------------------------------------------
+
+
+def _crud_taxonomy(
+    action: str,
+    list_fn,
+    get_fn,
+    create_fn,
+    update_fn,
+    delete_fn,
+    formatter,
+):
+    """Tuple-up the five CRUD operations for a simple {name} taxonomy resource."""
+    return list_fn, get_fn, create_fn, update_fn, delete_fn, formatter
+
+
+# ---------------------------------------------------------------------------
+# Categories
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_categories(page: int = 1, per_page: int = 100) -> str:
+    """List recipe categories."""
+    try:
+        data = _get_client().list_categories(
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=200),
+        )
+        return _dump(format_page(data, format_taxonomy_item))
+    except Exception as exc:
+        return _error("list_categories", exc)
+
+
+@mcp.tool()
+def get_category(category_id: str) -> str:
+    """Fetch a category by UUID."""
+    try:
+        category_id = validate_uuid(category_id, "category_id")
+        return _dump(format_taxonomy_item(_get_client().get_category(category_id)))
+    except Exception as exc:
+        return _error("get_category", exc)
+
+
+@mcp.tool()
+def create_category(name: str) -> str:
+    """Create a category."""
+    try:
+        name = validate_non_empty(name, "name")
+        return _dump(
+            format_taxonomy_item(_get_client().create_category({"name": name}))
+        )
+    except Exception as exc:
+        return _error("create_category", exc)
+
+
+@mcp.tool()
+def update_category(category_id: str, name: str) -> str:
+    """Rename a category by UUID."""
+    try:
+        category_id = validate_uuid(category_id, "category_id")
+        name = validate_non_empty(name, "name")
+        return _dump(
+            format_taxonomy_item(
+                _get_client().update_category(category_id, {"name": name})
+            )
+        )
+    except Exception as exc:
+        return _error("update_category", exc)
+
+
+@mcp.tool()
+def delete_category(category_id: str) -> str:
+    """Delete a category by UUID."""
+    try:
+        category_id = validate_uuid(category_id, "category_id")
+        _get_client().delete_category(category_id)
+        return _dump({"deleted": category_id})
+    except Exception as exc:
+        return _error("delete_category", exc)
+
+
+# ---------------------------------------------------------------------------
+# Tags
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_tags(page: int = 1, per_page: int = 100) -> str:
+    """List recipe tags."""
+    try:
+        data = _get_client().list_tags(
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=200),
+        )
+        return _dump(format_page(data, format_taxonomy_item))
+    except Exception as exc:
+        return _error("list_tags", exc)
+
+
+@mcp.tool()
+def get_tag(tag_id: str) -> str:
+    """Fetch a tag by UUID."""
+    try:
+        tag_id = validate_uuid(tag_id, "tag_id")
+        return _dump(format_taxonomy_item(_get_client().get_tag(tag_id)))
+    except Exception as exc:
+        return _error("get_tag", exc)
+
+
+@mcp.tool()
+def create_tag(name: str) -> str:
+    """Create a tag."""
+    try:
+        name = validate_non_empty(name, "name")
+        return _dump(format_taxonomy_item(_get_client().create_tag({"name": name})))
+    except Exception as exc:
+        return _error("create_tag", exc)
+
+
+@mcp.tool()
+def update_tag(tag_id: str, name: str) -> str:
+    """Rename a tag by UUID."""
+    try:
+        tag_id = validate_uuid(tag_id, "tag_id")
+        name = validate_non_empty(name, "name")
+        return _dump(
+            format_taxonomy_item(_get_client().update_tag(tag_id, {"name": name}))
+        )
+    except Exception as exc:
+        return _error("update_tag", exc)
+
+
+@mcp.tool()
+def delete_tag(tag_id: str) -> str:
+    """Delete a tag by UUID."""
+    try:
+        tag_id = validate_uuid(tag_id, "tag_id")
+        _get_client().delete_tag(tag_id)
+        return _dump({"deleted": tag_id})
+    except Exception as exc:
+        return _error("delete_tag", exc)
+
+
+# ---------------------------------------------------------------------------
+# Tools (kitchen tools)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_tools(page: int = 1, per_page: int = 100) -> str:
+    """List kitchen tools."""
+    try:
+        data = _get_client().list_tools(
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=200),
+        )
+        return _dump(format_page(data, format_taxonomy_item))
+    except Exception as exc:
+        return _error("list_tools", exc)
+
+
+@mcp.tool()
+def get_tool(tool_id: str) -> str:
+    """Fetch a kitchen tool by UUID."""
+    try:
+        tool_id = validate_uuid(tool_id, "tool_id")
+        return _dump(format_taxonomy_item(_get_client().get_tool(tool_id)))
+    except Exception as exc:
+        return _error("get_tool", exc)
+
+
+@mcp.tool()
+def create_tool(name: str) -> str:
+    """Create a kitchen tool."""
+    try:
+        name = validate_non_empty(name, "name")
+        return _dump(
+            format_taxonomy_item(_get_client().create_tool({"name": name}))
+        )
+    except Exception as exc:
+        return _error("create_tool", exc)
+
+
+@mcp.tool()
+def update_tool(tool_id: str, name: str) -> str:
+    """Rename a kitchen tool by UUID."""
+    try:
+        tool_id = validate_uuid(tool_id, "tool_id")
+        name = validate_non_empty(name, "name")
+        return _dump(
+            format_taxonomy_item(
+                _get_client().update_tool(tool_id, {"name": name})
+            )
+        )
+    except Exception as exc:
+        return _error("update_tool", exc)
+
+
+@mcp.tool()
+def delete_tool(tool_id: str) -> str:
+    """Delete a kitchen tool by UUID."""
+    try:
+        tool_id = validate_uuid(tool_id, "tool_id")
+        _get_client().delete_tool(tool_id)
+        return _dump({"deleted": tool_id})
+    except Exception as exc:
+        return _error("delete_tool", exc)
+
+
+# ---------------------------------------------------------------------------
+# Foods
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_foods(page: int = 1, per_page: int = 100) -> str:
+    """List ingredient foods."""
+    try:
+        data = _get_client().list_foods(
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=200),
+        )
+        return _dump(format_page(data, format_food))
+    except Exception as exc:
+        return _error("list_foods", exc)
+
+
+@mcp.tool()
+def get_food(food_id: str) -> str:
+    """Fetch a food by UUID."""
+    try:
+        food_id = validate_uuid(food_id, "food_id")
+        return _dump(format_food(_get_client().get_food(food_id)))
+    except Exception as exc:
+        return _error("get_food", exc)
+
+
+@mcp.tool()
+def create_food(
+    name: str,
+    plural_name: str = "",
+    description: str = "",
+    label_id: str = "",
+) -> str:
+    """Create a food (ingredient)."""
+    try:
+        name = validate_non_empty(name, "name")
+        body: dict[str, Any] = {"name": name}
+        if plural_name:
+            body["pluralName"] = plural_name
+        if description:
+            body["description"] = description
+        if label_id:
+            body["labelId"] = validate_uuid(label_id, "label_id")
+        return _dump(format_food(_get_client().create_food(body)))
+    except Exception as exc:
+        return _error("create_food", exc)
+
+
+@mcp.tool()
+def update_food(
+    food_id: str,
+    name: str = "",
+    plural_name: str = "",
+    description: str = "",
+    label_id: str = "",
+) -> str:
+    """Patch a food."""
+    try:
+        food_id = validate_uuid(food_id, "food_id")
+        patch: dict[str, Any] = {}
+        if name:
+            patch["name"] = name
+        if plural_name:
+            patch["pluralName"] = plural_name
+        if description:
+            patch["description"] = description
+        if label_id:
+            patch["labelId"] = validate_uuid(label_id, "label_id")
+        if not patch:
+            raise ValueError("update_food called with no changes.")
+        return _dump(format_food(_get_client().update_food(food_id, patch)))
+    except Exception as exc:
+        return _error("update_food", exc)
+
+
+@mcp.tool()
+def delete_food(food_id: str) -> str:
+    """Delete a food by UUID."""
+    try:
+        food_id = validate_uuid(food_id, "food_id")
+        _get_client().delete_food(food_id)
+        return _dump({"deleted": food_id})
+    except Exception as exc:
+        return _error("delete_food", exc)
+
+
+# ---------------------------------------------------------------------------
+# Units
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_units(page: int = 1, per_page: int = 100) -> str:
+    """List units of measure."""
+    try:
+        data = _get_client().list_units(
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=200),
+        )
+        return _dump(format_page(data, format_unit))
+    except Exception as exc:
+        return _error("list_units", exc)
+
+
+@mcp.tool()
+def get_unit(unit_id: str) -> str:
+    """Fetch a unit by UUID."""
+    try:
+        unit_id = validate_uuid(unit_id, "unit_id")
+        return _dump(format_unit(_get_client().get_unit(unit_id)))
+    except Exception as exc:
+        return _error("get_unit", exc)
+
+
+@mcp.tool()
+def create_unit(
+    name: str,
+    plural_name: str = "",
+    abbreviation: str = "",
+    plural_abbreviation: str = "",
+    description: str = "",
+    fraction: int = -1,
+    use_abbreviation: int = -1,
+) -> str:
+    """Create a unit of measure. fraction/use_abbreviation: 0=false, 1=true."""
+    try:
+        name = validate_non_empty(name, "name")
+        body: dict[str, Any] = {"name": name}
+        if plural_name:
+            body["pluralName"] = plural_name
+        if abbreviation:
+            body["abbreviation"] = abbreviation
+        if plural_abbreviation:
+            body["pluralAbbreviation"] = plural_abbreviation
+        if description:
+            body["description"] = description
+        if fraction in (0, 1):
+            body["fraction"] = bool(fraction)
+        if use_abbreviation in (0, 1):
+            body["useAbbreviation"] = bool(use_abbreviation)
+        return _dump(format_unit(_get_client().create_unit(body)))
+    except Exception as exc:
+        return _error("create_unit", exc)
+
+
+@mcp.tool()
+def update_unit(
+    unit_id: str,
+    name: str = "",
+    plural_name: str = "",
+    abbreviation: str = "",
+    plural_abbreviation: str = "",
+    description: str = "",
+    fraction: int = -1,
+    use_abbreviation: int = -1,
+) -> str:
+    """Patch a unit."""
+    try:
+        unit_id = validate_uuid(unit_id, "unit_id")
+        patch: dict[str, Any] = {}
+        if name:
+            patch["name"] = name
+        if plural_name:
+            patch["pluralName"] = plural_name
+        if abbreviation:
+            patch["abbreviation"] = abbreviation
+        if plural_abbreviation:
+            patch["pluralAbbreviation"] = plural_abbreviation
+        if description:
+            patch["description"] = description
+        if fraction in (0, 1):
+            patch["fraction"] = bool(fraction)
+        if use_abbreviation in (0, 1):
+            patch["useAbbreviation"] = bool(use_abbreviation)
+        if not patch:
+            raise ValueError("update_unit called with no changes.")
+        return _dump(format_unit(_get_client().update_unit(unit_id, patch)))
+    except Exception as exc:
+        return _error("update_unit", exc)
+
+
+@mcp.tool()
+def delete_unit(unit_id: str) -> str:
+    """Delete a unit by UUID."""
+    try:
+        unit_id = validate_uuid(unit_id, "unit_id")
+        _get_client().delete_unit(unit_id)
+        return _dump({"deleted": unit_id})
+    except Exception as exc:
+        return _error("delete_unit", exc)
+
+
+# ---------------------------------------------------------------------------
+# Labels
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_labels(page: int = 1, per_page: int = 100) -> str:
+    """List multi-purpose labels (used by foods, shopping items, etc.)."""
+    try:
+        data = _get_client().list_labels(
+            page=validate_page(page),
+            per_page=validate_limit(per_page, max_val=200),
+        )
+        return _dump(format_page(data, format_label))
+    except Exception as exc:
+        return _error("list_labels", exc)
+
+
+@mcp.tool()
+def get_label(label_id: str) -> str:
+    """Fetch a label by UUID."""
+    try:
+        label_id = validate_uuid(label_id, "label_id")
+        return _dump(format_label(_get_client().get_label(label_id)))
+    except Exception as exc:
+        return _error("get_label", exc)
+
+
+@mcp.tool()
+def create_label(name: str, color: str = "") -> str:
+    """Create a label. `color` is a CSS hex string like '#3f51b5'."""
+    try:
+        name = validate_non_empty(name, "name")
+        body: dict[str, Any] = {"name": name}
+        if color:
+            body["color"] = color
+        return _dump(format_label(_get_client().create_label(body)))
+    except Exception as exc:
+        return _error("create_label", exc)
+
+
+@mcp.tool()
+def update_label(label_id: str, name: str = "", color: str = "") -> str:
+    """Patch a label."""
+    try:
+        label_id = validate_uuid(label_id, "label_id")
+        patch: dict[str, Any] = {}
+        if name:
+            patch["name"] = name
+        if color:
+            patch["color"] = color
+        if not patch:
+            raise ValueError("update_label called with no changes.")
+        return _dump(format_label(_get_client().update_label(label_id, patch)))
+    except Exception as exc:
+        return _error("update_label", exc)
+
+
+@mcp.tool()
+def delete_label(label_id: str) -> str:
+    """Delete a label by UUID."""
+    try:
+        label_id = validate_uuid(label_id, "label_id")
+        _get_client().delete_label(label_id)
+        return _dump({"deleted": label_id})
+    except Exception as exc:
+        return _error("delete_label", exc)

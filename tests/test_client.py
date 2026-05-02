@@ -119,6 +119,93 @@ class TestDeleteRecipe:
         assert args == ("DELETE", "/api/recipes/tacos")
 
 
+class TestCookbooks:
+    def test_list_path(self, client):
+        client._http.request.return_value = _json_response({"items": []})
+        client.list_cookbooks()
+        args, kwargs = client._http.request.call_args
+        assert args == ("GET", "/api/households/cookbooks")
+        assert kwargs["params"] == {"page": 1, "perPage": 50}
+
+    def test_create_body(self, client):
+        client._http.request.return_value = _json_response({"id": "u"})
+        client.create_cookbook({"name": "Quick"})
+        _, kwargs = client._http.request.call_args
+        assert kwargs["json"] == {"name": "Quick"}
+
+
+class TestMealplans:
+    def test_list_with_dates(self, client):
+        client._http.request.return_value = _json_response({"items": []})
+        client.list_mealplans(start_date="2026-05-01", end_date="2026-05-07")
+        _, kwargs = client._http.request.call_args
+        assert kwargs["params"]["start_date"] == "2026-05-01"
+        assert kwargs["params"]["end_date"] == "2026-05-07"
+
+    def test_create_path(self, client):
+        client._http.request.return_value = _json_response({"id": 1})
+        client.create_mealplan({"date": "2026-05-02", "entryType": "dinner"})
+        args, _ = client._http.request.call_args
+        assert args == ("POST", "/api/households/mealplans")
+
+
+class TestShopping:
+    def test_add_recipe(self, client):
+        client._http.request.return_value = _json_response([])
+        client.add_recipe_to_shopping_list("L", "R", scale=2)
+        args, kwargs = client._http.request.call_args
+        assert args == ("POST", "/api/households/shopping/lists/L/recipe/R")
+        assert kwargs["json"] == {"recipeIncrementQuantity": 2}
+
+    def test_add_recipe_no_scale(self, client):
+        client._http.request.return_value = _json_response([])
+        client.add_recipe_to_shopping_list("L", "R")
+        _, kwargs = client._http.request.call_args
+        assert kwargs["json"] is None
+
+    def test_list_items_filter(self, client):
+        client._http.request.return_value = _json_response({"items": []})
+        client.list_shopping_items(list_id="L1")
+        _, kwargs = client._http.request.call_args
+        assert kwargs["params"]["queryFilter"] == "shoppingListId=L1"
+
+
+class TestParser:
+    def test_single(self, client):
+        client._http.request.return_value = _json_response({"input": "1 c flour"})
+        client.parse_ingredient("1 c flour", parser="brute")
+        args, kwargs = client._http.request.call_args
+        assert args == ("POST", "/api/parser/ingredient")
+        assert kwargs["json"] == {"ingredient": "1 c flour", "parser": "brute"}
+
+    def test_bulk(self, client):
+        client._http.request.return_value = _json_response([])
+        client.parse_ingredients(["a", "b"])
+        _, kwargs = client._http.request.call_args
+        assert kwargs["json"] == {"ingredients": ["a", "b"], "parser": "nlp"}
+
+
+class TestTaxonomy:
+    def test_categories_path(self, client):
+        client._http.request.return_value = _json_response({"items": []})
+        client.list_categories()
+        args, _ = client._http.request.call_args
+        assert args == ("GET", "/api/categories")
+
+    def test_labels_path(self, client):
+        client._http.request.return_value = _json_response({"items": []})
+        client.list_labels()
+        args, _ = client._http.request.call_args
+        assert args == ("GET", "/api/groups/labels")
+
+    def test_food_patch(self, client):
+        client._http.request.return_value = _json_response({"id": "f"})
+        client.update_food("f", {"name": "carrot"})
+        args, kwargs = client._http.request.call_args
+        assert args == ("PATCH", "/api/foods/f")
+        assert kwargs["json"] == {"name": "carrot"}
+
+
 class TestErrorHandling:
     def test_raises_on_4xx(self, client):
         client._http.request.return_value = _json_response(
