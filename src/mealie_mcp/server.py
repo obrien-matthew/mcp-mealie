@@ -3,6 +3,7 @@
 import json
 import re
 import uuid
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -41,6 +42,16 @@ from .validation import (
 )
 
 mcp = FastMCP("mcp-mealie")
+
+
+@mcp.tool()
+def get_server_version() -> str:
+    """Return the installed version of the mcp-mealie server."""
+    try:
+        return version("mcp-mealie")
+    except PackageNotFoundError:
+        return "unknown"
+
 
 _client: MealieClient | None = None
 

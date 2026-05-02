@@ -2,11 +2,13 @@
 
 import json
 import uuid
+from importlib.metadata import version
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from mealie_mcp.server import (
+    get_server_version,
     mcp,
     set_recipe_ingredients,
     set_recipe_instructions,
@@ -22,10 +24,16 @@ class TestServerCreation:
         assert mcp.name == "mcp-mealie"
 
 
+class TestGetServerVersion:
+    def test_returns_installed_version(self):
+        assert get_server_version() == version("mcp-mealie")
+
+
 class TestRegisteredTools:
     EXPECTED = {
         # diagnostics
         "get_about",
+        "get_server_version",
         "whoami",
         # recipes
         "list_recipes",
