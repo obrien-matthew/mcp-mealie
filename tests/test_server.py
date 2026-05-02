@@ -1,6 +1,7 @@
 """Tests for MCP server setup."""
 
 import json
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -163,12 +164,19 @@ class TestSetRecipeInstructions:
     def test_builds_patch(self, mock_client):
         set_recipe_instructions("soup", json.dumps(["Boil water", "Add carrots"]))
         _, patch_arg = mock_client.update_recipe.call_args.args
-        assert patch_arg == {
-            "recipeInstructions": [
-                {"text": "Boil water"},
-                {"text": "Add carrots"},
-            ]
-        }
+        assert "recipeInstructions" in patch_arg
+        steps = patch_arg["recipeInstructions"]
+        assert len(steps) == 2
+        assert [s["text"] for s in steps] == ["Boil water", "Add carrots"]
+        # Each step must carry the full RecipeStep shape Mealie's PATCH
+        # validator expects (a step missing id/title/summary/refs
+        # caused 500 TypeError on the server).
+        for step in steps:
+            assert step["title"] == ""
+            assert step["summary"] == ""
+            assert step["ingredientReferences"] == []
+            # id is a uuid4 string
+            uuid.UUID(step["id"])
 
     def test_rejects_empty(self, mock_client):
         result = set_recipe_instructions("soup", "[]")

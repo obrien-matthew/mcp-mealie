@@ -1,6 +1,7 @@
 """MCP server with Mealie tools."""
 
 import json
+import uuid
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -264,7 +265,16 @@ def set_recipe_instructions(slug: str, instructions_json: str) -> str:
             raise ValueError("instructions_json must be a JSON array of strings.")
         if not steps:
             raise ValueError("instructions_json cannot be empty.")
-        recipe_instructions = [{"text": s} for s in steps]
+        recipe_instructions = [
+            {
+                "id": str(uuid.uuid4()),
+                "title": "",
+                "summary": "",
+                "text": s,
+                "ingredientReferences": [],
+            }
+            for s in steps
+        ]
         return _dump(
             format_recipe_full(
                 _get_client().update_recipe(
