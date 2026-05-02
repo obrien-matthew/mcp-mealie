@@ -36,8 +36,10 @@ class TestRegisteredTools:
         "delete_recipe",
         "set_recipe_rating",
         "set_recipe_ingredients",
+        "set_recipe_ingredients_parsed",
         "set_recipe_instructions",
         "set_recipe_notes",
+        "parse_recipe_ingredients",
         # cookbooks
         "list_cookbooks",
         "get_cookbook",

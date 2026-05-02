@@ -25,6 +25,7 @@ from .formatting import (
     format_unit,
     format_user,
 )
+from .ingredient_resolver import IngredientResolver
 from .validation import (
     validate_day_of_week,
     validate_entry_type,
@@ -314,6 +315,111 @@ def set_recipe_notes(slug: str, notes_json: str) -> str:
         )
     except Exception as exc:
         return _error("set_recipe_notes", exc)
+
+
+def _parse_and_bind(
+    client: MealieClient,
+    raw_lines: list[str],
+    *,
+    min_confidence: float,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Parse each line, resolve food/unit IDs, return (recipeIngredient, summary).
+
+    `summary` reports per-line: kind=bound|free_text, food_name, unit_name,
+    confidence, original_text. Useful for showing the LLM what was matched.
+    """
+    parser = validate_parser("nlp")
+    parsed_results = client.parse_ingredients(raw_lines, parser=parser)
+    resolver = IngredientResolver(client, min_confidence=min_confidence)
+    bound: list[dict[str, Any]] = []
+    summary: list[dict[str, Any]] = []
+    for line, parsed in zip(raw_lines, parsed_results, strict=True):
+        ingredient_payload = resolver.to_recipe_ingredient(parsed, original_text=line)
+        bound.append(ingredient_payload)
+        food = ingredient_payload.get("food")
+        unit = ingredient_payload.get("unit")
+        confidence = ((parsed or {}).get("confidence") or {}).get("average")
+        summary.append(
+            {
+                "original_text": line,
+                "kind": "bound" if food else "free_text",
+                "food": food.get("name") if food else None,
+                "unit": unit.get("name") if unit else None,
+                "quantity": ingredient_payload.get("quantity"),
+                "confidence": confidence,
+            }
+        )
+    return bound, summary
+
+
+@mcp.tool()
+def parse_recipe_ingredients(slug: str, min_confidence: float = 0.5) -> str:
+    """Re-parse a recipe's free-text ingredients and bind to food/unit IDs.
+
+    Reads the recipe's current ingredients, runs each line through
+    Mealie's NLP parser, looks up matching food / unit records (matching
+    on name, plural, abbreviations, and aliases — case-insensitive),
+    creates new food / unit records when no match exists, and writes the
+    bound result back to the recipe. After this runs, ingredients are
+    eligible for shopping-list aggregation.
+
+    Lines whose parsed average confidence falls below `min_confidence`
+    are stored as free text (no binding) so quirky lines like
+    "splash of sake for deglazing" don't pollute the food catalogue.
+
+    Returns a per-line summary of what was bound vs. left as free text.
+    """
+    try:
+        slug = validate_slug(slug)
+        client = _get_client()
+        recipe = client.get_recipe(slug)
+        raw_lines: list[str] = []
+        for ing in recipe.get("recipeIngredient") or []:
+            text = (
+                ing.get("originalText") or ing.get("display") or ing.get("note") or ""
+            )
+            if text:
+                raw_lines.append(text)
+        if not raw_lines:
+            raise ValueError("Recipe has no ingredient lines to parse.")
+        bound, summary = _parse_and_bind(
+            client, raw_lines, min_confidence=min_confidence
+        )
+        client.update_recipe(slug, {"recipeIngredient": bound})
+        return _dump({"slug": slug, "ingredients": summary})
+    except Exception as exc:
+        return _error("parse_recipe_ingredients", exc)
+
+
+@mcp.tool()
+def set_recipe_ingredients_parsed(
+    slug: str, ingredients_json: str, min_confidence: float = 0.5
+) -> str:
+    """Like set_recipe_ingredients, but parses each line and binds food/unit IDs.
+
+    `ingredients_json` is a JSON array of strings. Each is run through
+    Mealie's NLP parser; recognized food / unit names are matched
+    against the existing taxonomy (or created if not present), so the
+    resulting recipe is shopping-list-aggregation-ready.
+
+    Lines whose parsed average confidence falls below `min_confidence`
+    are stored as free text.
+
+    Returns a per-line summary of what was bound vs. left as free text.
+    """
+    try:
+        slug = validate_slug(slug)
+        items = json.loads(ingredients_json)
+        if not isinstance(items, list) or not all(isinstance(s, str) for s in items):
+            raise ValueError("ingredients_json must be a JSON array of strings.")
+        if not items:
+            raise ValueError("ingredients_json cannot be empty.")
+        client = _get_client()
+        bound, summary = _parse_and_bind(client, items, min_confidence=min_confidence)
+        client.update_recipe(slug, {"recipeIngredient": bound})
+        return _dump({"slug": slug, "ingredients": summary})
+    except Exception as exc:
+        return _error("set_recipe_ingredients_parsed", exc)
 
 
 # ---------------------------------------------------------------------------
