@@ -136,9 +136,7 @@ def format_mealplan(m: dict[str, Any]) -> dict[str, Any]:
         "title": m.get("title"),
         "text": m.get("text"),
         "recipe_id": m.get("recipeId"),
-        "recipe": (
-            format_recipe_summary(m["recipe"]) if m.get("recipe") else None
-        ),
+        "recipe": (format_recipe_summary(m["recipe"]) if m.get("recipe") else None),
     }
 
 
@@ -162,9 +160,7 @@ def format_shopping_list(s: dict[str, Any]) -> dict[str, Any]:
         "name": s.get("name"),
         "group_id": s.get("groupId"),
         "household_id": s.get("householdId"),
-        "list_items": [
-            format_shopping_item(i) for i in (s.get("listItems") or [])
-        ],
+        "list_items": [format_shopping_item(i) for i in (s.get("listItems") or [])],
         "recipe_references": [
             {"recipe_id": r.get("recipeId"), "scale": r.get("recipeQuantity")}
             for r in (s.get("recipeReferences") or [])

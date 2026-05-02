@@ -11,8 +11,14 @@ _UUID_RE = re.compile(
 
 _ENTRY_TYPES = {"breakfast", "lunch", "dinner", "side"}
 _DAYS_OF_WEEK = {
-    "monday", "tuesday", "wednesday", "thursday",
-    "friday", "saturday", "sunday", "unset",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "unset",
 }
 _PARSER_TYPES = {"nlp", "brute"}
 
@@ -93,9 +99,7 @@ def validate_day_of_week(value: str) -> str:
     """Validate a meal-plan-rule day."""
     lower = value.strip().lower()
     if lower not in _DAYS_OF_WEEK:
-        raise ValueError(
-            f"day must be one of {sorted(_DAYS_OF_WEEK)}, got '{value}'."
-        )
+        raise ValueError(f"day must be one of {sorted(_DAYS_OF_WEEK)}, got '{value}'.")
     return lower
 
 

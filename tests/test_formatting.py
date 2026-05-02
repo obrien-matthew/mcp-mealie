@@ -206,9 +206,7 @@ class TestFormatShopping:
                 "id": "lid",
                 "name": "Groceries",
                 "listItems": [{"id": "a", "note": "carrots"}],
-                "recipeReferences": [
-                    {"recipeId": "r1", "recipeQuantity": 1}
-                ],
+                "recipeReferences": [{"recipeId": "r1", "recipeQuantity": 1}],
             }
         )
         assert out["list_items"][0]["note"] == "carrots"

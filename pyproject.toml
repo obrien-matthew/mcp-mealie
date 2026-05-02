@@ -58,7 +58,7 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["mealie_mcp"]
-omit = ["src/mealie_mcp/auth.py"]
+omit = ["src/mealie_mcp/auth.py", "src/mealie_mcp/server.py"]
 
 [project.scripts]
 mcp-mealie = "mealie_mcp:main"

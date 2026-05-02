@@ -111,9 +111,7 @@ class TestUpdateRecipe:
 
 class TestDeleteRecipe:
     def test_path(self, client):
-        client._http.request.return_value = httpx.Response(
-            204, request=_MOCK_REQUEST
-        )
+        client._http.request.return_value = httpx.Response(204, request=_MOCK_REQUEST)
         assert client.delete_recipe("tacos") is None
         args, _ = client._http.request.call_args
         assert args == ("DELETE", "/api/recipes/tacos")

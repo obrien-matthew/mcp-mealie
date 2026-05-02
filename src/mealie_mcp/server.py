@@ -262,9 +262,7 @@ def update_cookbook(
             patch["public"] = bool(public)
         if not patch:
             raise ValueError("update_cookbook called with no changes.")
-        return _dump(
-            format_cookbook(_get_client().update_cookbook(cookbook_id, patch))
-        )
+        return _dump(format_cookbook(_get_client().update_cookbook(cookbook_id, patch)))
     except Exception as exc:
         return _error("update_cookbook", exc)
 
@@ -371,9 +369,7 @@ def update_mealplan(
             patch["recipeId"] = validate_uuid(recipe_id, "recipe_id")
         if not patch:
             raise ValueError("update_mealplan called with no changes.")
-        return _dump(
-            format_mealplan(_get_client().update_mealplan(mealplan_id, patch))
-        )
+        return _dump(format_mealplan(_get_client().update_mealplan(mealplan_id, patch)))
     except Exception as exc:
         return _error("update_mealplan", exc)
 
@@ -411,9 +407,7 @@ def get_mealplan_rule(rule_id: str) -> str:
     """Fetch a meal-plan rule by UUID."""
     try:
         rule_id = validate_uuid(rule_id, "rule_id")
-        return _dump(
-            format_mealplan_rule(_get_client().get_mealplan_rule(rule_id))
-        )
+        return _dump(format_mealplan_rule(_get_client().get_mealplan_rule(rule_id)))
     except Exception as exc:
         return _error("get_mealplan_rule", exc)
 
@@ -436,9 +430,7 @@ def create_mealplan_rule(
             "entryType": validate_entry_type(entry_type),
             "queryFilterString": query_filter_string,
         }
-        return _dump(
-            format_mealplan_rule(_get_client().create_mealplan_rule(body))
-        )
+        return _dump(format_mealplan_rule(_get_client().create_mealplan_rule(body)))
     except Exception as exc:
         return _error("create_mealplan_rule", exc)
 
@@ -463,9 +455,7 @@ def update_mealplan_rule(
         if not patch:
             raise ValueError("update_mealplan_rule called with no changes.")
         return _dump(
-            format_mealplan_rule(
-                _get_client().update_mealplan_rule(rule_id, patch)
-            )
+            format_mealplan_rule(_get_client().update_mealplan_rule(rule_id, patch))
         )
     except Exception as exc:
         return _error("update_mealplan_rule", exc)
@@ -505,9 +495,7 @@ def get_shopping_list(list_id: str) -> str:
     """Fetch a shopping list by UUID, including its items."""
     try:
         list_id = validate_uuid(list_id, "list_id")
-        return _dump(
-            format_shopping_list(_get_client().get_shopping_list(list_id))
-        )
+        return _dump(format_shopping_list(_get_client().get_shopping_list(list_id)))
     except Exception as exc:
         return _error("get_shopping_list", exc)
 
@@ -535,9 +523,7 @@ def update_shopping_list(list_id: str, name: str = "") -> str:
         if not patch:
             raise ValueError("update_shopping_list called with no changes.")
         return _dump(
-            format_shopping_list(
-                _get_client().update_shopping_list(list_id, patch)
-            )
+            format_shopping_list(_get_client().update_shopping_list(list_id, patch))
         )
     except Exception as exc:
         return _error("update_shopping_list", exc)
@@ -555,9 +541,7 @@ def delete_shopping_list(list_id: str) -> str:
 
 
 @mcp.tool()
-def add_recipe_to_shopping_list(
-    list_id: str, recipe_id: str, scale: int = 1
-) -> str:
+def add_recipe_to_shopping_list(list_id: str, recipe_id: str, scale: int = 1) -> str:
     """Add a recipe's ingredients to a shopping list. `scale` multiplies amounts."""
     try:
         list_id = validate_uuid(list_id, "list_id")
@@ -588,9 +572,7 @@ def remove_recipe_from_shopping_list(list_id: str, recipe_id: str) -> str:
 
 
 @mcp.tool()
-def list_shopping_items(
-    list_id: str = "", page: int = 1, per_page: int = 100
-) -> str:
+def list_shopping_items(list_id: str = "", page: int = 1, per_page: int = 100) -> str:
     """List shopping items, optionally filtered to one shopping list."""
     try:
         lid = validate_uuid(list_id, "list_id") if list_id else None
@@ -703,9 +685,7 @@ def update_shopping_item(
         if not patch:
             raise ValueError("update_shopping_item called with no changes.")
         return _dump(
-            format_shopping_item(
-                _get_client().update_shopping_item(item_id, patch)
-            )
+            format_shopping_item(_get_client().update_shopping_item(item_id, patch))
         )
     except Exception as exc:
         return _error("update_shopping_item", exc)
@@ -767,9 +747,7 @@ def parse_recipe_ingredients(slug: str, parser: str = "nlp") -> str:
     try:
         slug = validate_slug(slug)
         parser = validate_parser(parser)
-        return _dump(
-            _get_client().parse_recipe_ingredients(slug, parser=parser)
-        )
+        return _dump(_get_client().parse_recipe_ingredients(slug, parser=parser))
     except Exception as exc:
         return _error("parse_recipe_ingredients", exc)
 
@@ -953,9 +931,7 @@ def create_tool(name: str) -> str:
     """Create a kitchen tool."""
     try:
         name = validate_non_empty(name, "name")
-        return _dump(
-            format_taxonomy_item(_get_client().create_tool({"name": name}))
-        )
+        return _dump(format_taxonomy_item(_get_client().create_tool({"name": name})))
     except Exception as exc:
         return _error("create_tool", exc)
 
@@ -967,9 +943,7 @@ def update_tool(tool_id: str, name: str) -> str:
         tool_id = validate_uuid(tool_id, "tool_id")
         name = validate_non_empty(name, "name")
         return _dump(
-            format_taxonomy_item(
-                _get_client().update_tool(tool_id, {"name": name})
-            )
+            format_taxonomy_item(_get_client().update_tool(tool_id, {"name": name}))
         )
     except Exception as exc:
         return _error("update_tool", exc)

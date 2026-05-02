@@ -115,9 +115,7 @@ class MealieClient:
             return result["slug"]
         raise MealieError(f"Unexpected create_recipe response: {result!r}")
 
-    def create_recipe_from_url(
-        self, url: str, *, include_tags: bool = False
-    ) -> str:
+    def create_recipe_from_url(self, url: str, *, include_tags: bool = False) -> str:
         result = self._request(
             "POST",
             "/api/recipes/create-url",
@@ -358,9 +356,7 @@ class MealieClient:
             action=f"add_recipe_to_shopping_list({list_id},{recipe_id})",
         )
 
-    def remove_recipe_from_shopping_list(
-        self, list_id: str, recipe_id: str
-    ) -> Any:
+    def remove_recipe_from_shopping_list(self, list_id: str, recipe_id: str) -> Any:
         return self._request(
             "DELETE",
             f"/api/households/shopping/lists/{list_id}/recipe/{recipe_id}",
@@ -489,18 +485,14 @@ class MealieClient:
     ) -> dict[str, Any]:
         if not patch:
             raise MealieError(f"{action} called with no fields to update.")
-        return self._request(
-            "PATCH", f"{path}/{item_id}", json=patch, action=action
-        )
+        return self._request("PATCH", f"{path}/{item_id}", json=patch, action=action)
 
     def _taxonomy_delete(self, path: str, item_id: str, action: str) -> Any:
         return self._request("DELETE", f"{path}/{item_id}", action=action)
 
     # Categories
     def list_categories(self, *, page: int = 1, per_page: int = 100):
-        return self._taxonomy_list(
-            "/api/categories", page, per_page, "list_categories"
-        )
+        return self._taxonomy_list("/api/categories", page, per_page, "list_categories")
 
     def get_category(self, category_id: str):
         return self._taxonomy_get(
@@ -557,9 +549,7 @@ class MealieClient:
         )
 
     def delete_tool(self, tool_id: str):
-        return self._taxonomy_delete(
-            "/api/tools", tool_id, f"delete_tool({tool_id})"
-        )
+        return self._taxonomy_delete("/api/tools", tool_id, f"delete_tool({tool_id})")
 
     # Foods
     def list_foods(self, *, page: int = 1, per_page: int = 100):
@@ -577,9 +567,7 @@ class MealieClient:
         )
 
     def delete_food(self, food_id: str):
-        return self._taxonomy_delete(
-            "/api/foods", food_id, f"delete_food({food_id})"
-        )
+        return self._taxonomy_delete("/api/foods", food_id, f"delete_food({food_id})")
 
     # Units
     def list_units(self, *, page: int = 1, per_page: int = 100):
@@ -597,15 +585,11 @@ class MealieClient:
         )
 
     def delete_unit(self, unit_id: str):
-        return self._taxonomy_delete(
-            "/api/units", unit_id, f"delete_unit({unit_id})"
-        )
+        return self._taxonomy_delete("/api/units", unit_id, f"delete_unit({unit_id})")
 
     # Labels
     def list_labels(self, *, page: int = 1, per_page: int = 100):
-        return self._taxonomy_list(
-            "/api/groups/labels", page, per_page, "list_labels"
-        )
+        return self._taxonomy_list("/api/groups/labels", page, per_page, "list_labels")
 
     def get_label(self, label_id: str):
         return self._taxonomy_get(
@@ -613,9 +597,7 @@ class MealieClient:
         )
 
     def create_label(self, body: dict[str, Any]):
-        return self._taxonomy_create(
-            "/api/groups/labels", body, "create_label"
-        )
+        return self._taxonomy_create("/api/groups/labels", body, "create_label")
 
     def update_label(self, label_id: str, patch: dict[str, Any]):
         return self._taxonomy_update(

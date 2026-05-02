@@ -68,7 +68,9 @@ class TestValidateSlug:
 
 class TestValidateUrl:
     def test_https(self):
-        assert validate_url("https://example.com/recipe") == "https://example.com/recipe"
+        assert (
+            validate_url("https://example.com/recipe") == "https://example.com/recipe"
+        )
 
     def test_http(self):
         assert validate_url("http://example.com") == "http://example.com"
