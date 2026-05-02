@@ -180,6 +180,42 @@ class TestSetRecipeInstructions:
             # id is a uuid4 string
             uuid.UUID(step["id"])
 
+    def test_auto_splits_title_colon_text(self, mock_client):
+        set_recipe_instructions(
+            "soup",
+            json.dumps(["Press the tofu: Drain and wrap in a clean towel."]),
+        )
+        _, patch_arg = mock_client.update_recipe.call_args.args
+        step = patch_arg["recipeInstructions"][0]
+        assert step["title"] == "Press the tofu"
+        assert step["text"] == "Drain and wrap in a clean towel."
+
+    def test_does_not_split_long_or_punctuated_prefix(self, mock_client):
+        # "Bring..." is too long and contains a period, so the colon
+        # later in the line shouldn't trigger an auto-split.
+        prose = (
+            "Bring a large pot of water to a rolling boil. Cook noodles "
+            "until al dente: usually 4-5 minutes."
+        )
+        set_recipe_instructions("soup", json.dumps([prose]))
+        _, patch_arg = mock_client.update_recipe.call_args.args
+        step = patch_arg["recipeInstructions"][0]
+        assert step["title"] == ""
+        assert step["text"] == prose
+
+    def test_accepts_explicit_dict_form(self, mock_client):
+        set_recipe_instructions(
+            "soup",
+            json.dumps(
+                [{"title": "Cook the steak: medium rare", "text": "Sear 3 min/side"}]
+            ),
+        )
+        _, patch_arg = mock_client.update_recipe.call_args.args
+        step = patch_arg["recipeInstructions"][0]
+        # Dict form is taken verbatim -- no auto-split on the title.
+        assert step["title"] == "Cook the steak: medium rare"
+        assert step["text"] == "Sear 3 min/side"
+
     def test_rejects_empty(self, mock_client):
         result = set_recipe_instructions("soup", "[]")
         assert "cannot be empty" in result

@@ -1,6 +1,7 @@
 """MCP server with Mealie tools."""
 
 import json
+import re
 import uuid
 from typing import Any
 
@@ -61,6 +62,39 @@ def _error(action: str, exc: Exception) -> str:
             {"error": action, "message": exc.message, "status": exc.status_code}
         )
     return _dump({"error": action, "message": str(exc)})
+
+
+# Matches "Title: rest" where the title is a single line, has no internal
+# colons or periods, and is short. Used to auto-split step text into a
+# title field. Long titles or titles containing punctuation that suggests
+# multiple sentences won't match -- those stay as plain text.
+_STEP_TITLE_RE = re.compile(r"^([^:.\n]{1,60}):\s+(.+)$", re.DOTALL)
+
+
+def _build_recipe_step(item: Any) -> dict[str, Any]:
+    """Coerce a string or {title, text} dict into a Mealie RecipeStep payload.
+
+    Strings ending in "Title: text" are auto-split. Pass an explicit
+    {title: "", text: ...} dict to opt out of auto-splitting.
+    """
+    if isinstance(item, str):
+        match = _STEP_TITLE_RE.match(item)
+        title = match.group(1).strip() if match else ""
+        text = match.group(2).strip() if match else item
+    elif isinstance(item, dict) and "text" in item:
+        title = str(item.get("title") or "").strip()
+        text = str(item["text"])
+    else:
+        raise ValueError(
+            "each step must be a string or an object with at least 'text'."
+        )
+    return {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "summary": "",
+        "text": text,
+        "ingredientReferences": [],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -256,26 +290,23 @@ def set_recipe_ingredients(slug: str, ingredients_json: str) -> str:
 def set_recipe_instructions(slug: str, instructions_json: str) -> str:
     """Replace a recipe's instruction steps with the given lines.
 
-    `instructions_json` is a JSON array of strings, one per step
-    (e.g. `["Boil water", "Add pasta and cook 8 minutes"]`).
+    `instructions_json` is a JSON array. Each element is either:
+      - a string ("Boil water"), or
+      - an object ({"title": "Boil", "text": "Boil water"}).
+
+    Strings starting with a short "Title: rest" prefix are auto-split:
+    "Boil water: bring 4 quarts to a rolling boil" becomes
+    {title: "Boil water", text: "bring 4 quarts..."}. Pass the dict
+    form with an empty title to opt out of auto-splitting.
     """
     try:
         slug = validate_slug(slug)
-        steps = json.loads(instructions_json)
-        if not isinstance(steps, list) or not all(isinstance(s, str) for s in steps):
-            raise ValueError("instructions_json must be a JSON array of strings.")
-        if not steps:
+        raw = json.loads(instructions_json)
+        if not isinstance(raw, list):
+            raise ValueError("instructions_json must be a JSON array.")
+        if not raw:
             raise ValueError("instructions_json cannot be empty.")
-        recipe_instructions = [
-            {
-                "id": str(uuid.uuid4()),
-                "title": "",
-                "summary": "",
-                "text": s,
-                "ingredientReferences": [],
-            }
-            for s in steps
-        ]
+        recipe_instructions = [_build_recipe_step(item) for item in raw]
         return _dump(
             format_recipe_full(
                 _get_client().update_recipe(
