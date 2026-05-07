@@ -160,13 +160,13 @@ class TestSetRecipeIngredients:
         }
 
     def test_rejects_empty(self, mock_client):
-        result = set_recipe_ingredients("soup", "[]")
-        assert "cannot be empty" in result
+        with pytest.raises(ValueError, match="cannot be empty"):
+            set_recipe_ingredients("soup", "[]")
         mock_client.update_recipe.assert_not_called()
 
     def test_rejects_non_strings(self, mock_client):
-        result = set_recipe_ingredients("soup", "[1, 2]")
-        assert "JSON array of strings" in result
+        with pytest.raises(ValueError, match="JSON array of strings"):
+            set_recipe_ingredients("soup", "[1, 2]")
         mock_client.update_recipe.assert_not_called()
 
 
@@ -236,8 +236,8 @@ class TestSetRecipeInstructions:
         assert step["text"] == "Sear 3 min/side"
 
     def test_rejects_empty(self, mock_client):
-        result = set_recipe_instructions("soup", "[]")
-        assert "cannot be empty" in result
+        with pytest.raises(ValueError, match="cannot be empty"):
+            set_recipe_instructions("soup", "[]")
         mock_client.update_recipe.assert_not_called()
 
 
@@ -261,6 +261,6 @@ class TestSetRecipeNotes:
         }
 
     def test_rejects_missing_text(self, mock_client):
-        result = set_recipe_notes("soup", json.dumps([{"title": "T"}]))
-        assert "with at least 'text'" in result
+        with pytest.raises(ValueError, match="with at least 'text'"):
+            set_recipe_notes("soup", json.dumps([{"title": "T"}]))
         mock_client.update_recipe.assert_not_called()
